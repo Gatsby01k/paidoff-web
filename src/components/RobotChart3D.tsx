@@ -44,14 +44,14 @@ function useTradingFeed(points = 42) {
 
 function RobotArm({
   target,
-  base = new THREE.Vector3(0, 0.5, 0),
+  base = new THREE.Vector3(0, 0, 0),
 }: {
   target: THREE.Vector3 | null;
   base?: THREE.Vector3;
 }) {
   const shoulder = useRef<THREE.Group>(null);
-  const forearm  = useRef<THREE.Group>(null);
-  const hand     = useRef<THREE.Mesh>(null);
+  const forearm = useRef<THREE.Group>(null);
+  const hand = useRef<THREE.Mesh>(null);
 
   const L1 = 0.7;
   const L2 = 0.6;
@@ -70,7 +70,7 @@ function RobotArm({
     const elbowAng = Math.PI - Math.acos(THREE.MathUtils.clamp((L1 * L1 + L2 * L2 - d * d) / (2 * L1 * L2), -1, 1));
 
     shoulder.current.rotation.z = THREE.MathUtils.lerp(shoulder.current.rotation.z, shoulderAng, 0.15);
-    forearm.current.rotation.z  = THREE.MathUtils.lerp(forearm.current.rotation.z,  elbowAng,    0.2);
+    forearm.current.rotation.z = THREE.MathUtils.lerp(forearm.current.rotation.z, elbowAng, 0.2);
     shoulder.current.rotation.y = THREE.MathUtils.lerp(
       shoulder.current.rotation.y,
       Math.sin(performance.now() / 1200) * 0.1,
@@ -85,23 +85,27 @@ function RobotArm({
 
   return (
     <group position={base.toArray()}>
+      {/* постамент */}
       <mesh position={[0, -0.25, 0]}>
         <cylinderGeometry args={[0.08, 0.1, 0.5, 16]} />
         <meshStandardMaterial color={"#202226"} />
       </mesh>
 
+      {/* плечо */}
       <group ref={shoulder}>
         <mesh position={[L1 / 2, 0, 0]}>
           <boxGeometry args={[L1, 0.1, 0.1]} />
           <meshStandardMaterial color={"#FFE500"} metalness={0.3} roughness={0.4} />
         </mesh>
 
+        {/* предплечье */}
         <group ref={forearm} position={[L1, 0, 0]}>
           <mesh position={[L2 / 2, 0, 0]}>
             <boxGeometry args={[L2, 0.09, 0.09]} />
             <meshStandardMaterial color={"#F3D200"} metalness={0.35} roughness={0.35} />
           </mesh>
 
+          {/* «щупальце» */}
           <mesh ref={hand} position={[L2 + 0.05, 0, 0]}>
             <boxGeometry args={[0.12, 0.06, 0.06]} />
             <meshStandardMaterial color={"#ffffff"} emissive={"#FFE500"} emissiveIntensity={0.6} />
@@ -160,56 +164,68 @@ function Scene() {
   const { curvePts, trade } = useTradingFeed();
   const linePts = useMemo(() => curvePts.map((v) => v.clone()), [curvePts]);
 
-  const target = useMemo(() => {
-    const p = trade ? new THREE.Vector3(trade.x, trade.y, 0) : linePts[linePts.length - 1];
-    return p ? p.clone() : null;
-  }, [linePts, trade]);
+  // сдвигаем поток так, чтобы последний пункт был около правого края
+  const last = linePts[linePts.length - 1] ?? new THREE.Vector3(0, 1, 0);
+  const shiftX = 6.2 - last.x;
 
-  const tradeBurst = useMemo(() => (trade ? new THREE.Vector3(trade.x, trade.y, 0) : null), [trade]);
+  // цель для робота в локальных координатах группы графика
+  const targetLocal = useMemo(() => {
+    const p = trade ? new THREE.Vector3(trade.x, trade.y, 0) : last.clone();
+    p.x += shiftX;
+    return p;
+  }, [trade, last, shiftX]);
+
+  const burst = useMemo(
+    () => (trade ? new THREE.Vector3(trade.x + shiftX, trade.y, 0) : null),
+    [trade, shiftX]
+  );
 
   return (
     <>
-      <ambientLight intensity={0.4} />
-      <pointLight position={[2, 3, 3]} intensity={1.2} color={"#ffd84d"} />
+      <ambientLight intensity={0.45} />
+      <pointLight position={[2, 3, 3]} intensity={1.15} color={"#ffd84d"} />
       <Stars radius={12} depth={8} factor={0.2} fade speed={0.8} />
 
+      {/* одна общая группа графика (позиция/поворот справа) */}
       <group position={[2.2, 0.9, 0]} rotation={[-Math.PI * 0.12, Math.PI * 0.07, 0]}>
+        {/* фон плоскости */}
         <mesh>
           <planeGeometry args={[7.2, 3.4, 10, 10]} />
           <meshStandardMaterial color={"#0f0f11"} metalness={0.1} roughness={0.9} />
         </mesh>
         <gridHelper args={[7, 7, 0x333333, 0x222222]} rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.002]} />
-      </group>
 
-      {linePts.length > 1 && (
-        <group
-          position={[2.2 - (linePts[linePts.length - 1].x - 6.2), 0.9, 0]}
-          rotation={[-Math.PI * 0.12, Math.PI * 0.07, 0]}
-        >
-          <Line
-            points={linePts.map((p) => new THREE.Vector3(p.x, p.y, 0.02))}
-            color={"#22D3EE"}
-            lineWidth={2}
-          />
-          {linePts.map((c, i) => {
-            if (i < 2) return null;
-            const prev = linePts[i - 1];
-            const up = c.y >= prev.y;
-            const h = Math.max(0.02, Math.abs(c.y - prev.y));
-            const y = Math.min(c.y, prev.y) + h / 2;
-            const col = up ? "#36D399" : "#F87171";
-            return (
-              <mesh key={i} position={[c.x, y, 0.01]}>
-                <boxGeometry args={[0.09, h, 0.06]} />
-                <meshStandardMaterial color={col} />
-              </mesh>
-            );
-          })}
+        {/* поток (сдвинут внутрь группы) */}
+        <group position={[shiftX, 0, 0]}>
+          {linePts.length > 1 && (
+            <>
+              <Line
+                points={linePts.map((p) => new THREE.Vector3(p.x, p.y, 0.02))}
+                color={"#22D3EE"}
+                lineWidth={2}
+              />
+              {linePts.map((c, i) => {
+                if (i < 2) return null;
+                const prev = linePts[i - 1];
+                const up = c.y >= prev.y;
+                const h = Math.max(0.02, Math.abs(c.y - prev.y));
+                const y = Math.min(c.y, prev.y) + h / 2;
+                const col = up ? "#36D399" : "#F87171";
+                return (
+                  <mesh key={i} position={[c.x, y, 0.01]}>
+                    <boxGeometry args={[0.09, h, 0.06]} />
+                    <meshStandardMaterial color={col} />
+                  </mesh>
+                );
+              })}
+            </>
+          )}
         </group>
-      )}
 
-      <RobotArm target={target} base={new THREE.Vector3(0.2, 0.7, 0)} />
-      <Particles at={tradeBurst} />
+        {/* робот — в той же группе, у левого края графика */}
+        <RobotArm target={targetLocal} base={new THREE.Vector3(-2.9, -1.15, 0.06)} />
+        <Particles at={burst} />
+      </group>
     </>
   );
 }
