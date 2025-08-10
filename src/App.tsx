@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from "react";
 import "./styles.css";
 
-import AnimatedRobot from "./components/AnimatedRobot";
-import LiveChart from "./components/LiveChart";
+import RobotChart3D from "./components/RobotChart3D";
 import ChatWidget from "./components/ChatWidget";
 
 type Risk = "LOW" | "MEDIUM" | "HIGH";
@@ -77,7 +76,7 @@ export default function App() {
 
       {/* HERO */}
       <section className="max-w-6xl mx-auto px-6 py-12 grid md:grid-cols-2 gap-10 items-start">
-        {/* LEFT: copy + form + robot */}
+        {/* LEFT: текст + форма */}
         <div className="flex flex-col gap-6">
           <h1 className="text-4xl md:text-5xl font-black leading-tight text-yellow-50 drop-shadow-[0_8px_40px_rgba(255,229,0,0.12)]">
             Авто-трейдинг на ИИ с фиксированным сроком и риском
@@ -125,7 +124,8 @@ export default function App() {
           <div className="flex items-center justify-between p-4 rounded-2xl bg-[#0e0f11] border border-yellow-500/20">
             <div className="text-yellow-300/80">Прогноз на выплату</div>
             <div className="text-2xl font-black">
-              {projected} <span className="text-sm">USDT</span>
+              {(amount * (1 + pr * months)).toFixed(2)}{" "}
+              <span className="text-sm">USDT</span>
             </div>
           </div>
 
@@ -150,21 +150,18 @@ export default function App() {
             </span>
           </div>
 
-          {/* робот */}
-          <AnimatedRobot />
+          {/* мини-статики под формой */}
+          <div className="flex gap-3">
+            <Stat label="Risk" value={risk} />
+            <Stat label="APR (mo)" value={(pr * 100).toFixed(0) + "%"} />
+          </div>
         </div>
 
-        {/* RIGHT: live chart */}
-        <div className="bg-[#111214] border border-yellow-500/20 rounded-3xl p-5 relative shadow-[0_10px_30px_rgba(0,0,0,.35)]">
-          <div className="text-yellow-300/80 font-semibold mb-3">
-            AI Trading Simulation
-          </div>
-          <LiveChart />
-          <div className="pointer-events-none absolute inset-0 rounded-3xl shadow-[0_0_0_2px_rgba(255,229,0,.15)_inset,0_0_60px_rgba(255,229,0,.12)]" />
-        </div>
+        {/* RIGHT: 3D сцена — робот + график */}
+        <RobotChart3D />
       </section>
 
-      {/* PLANS (оставляем как есть/упростили) */}
+      {/* PLANS */}
       <section className="max-w-6xl mx-auto px-6 pb-16">
         <h2 className="text-2xl font-black mb-6">Планы</h2>
         <div className="grid md:grid-cols-3 gap-6">
@@ -208,7 +205,7 @@ export default function App() {
         © {new Date().getFullYear()} PaidOFF. All rights reserved.
       </footer>
 
-      {/* Chat widget */}
+      {/* Чат-виджет */}
       <ChatWidget />
     </div>
   );
