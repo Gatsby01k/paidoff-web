@@ -13,3 +13,5 @@ npm run dev
 2) Push this folder to it
 3) Import the repo in Vercel (Framework: Vite)
 4) Deploy
+
+chore: trigger preview
