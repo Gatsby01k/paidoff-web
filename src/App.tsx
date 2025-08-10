@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import "./styles.css";
 
-import RobotChart3D from "./components/RobotChart3D";
+import RobotGLTFChart from "./components/RobotGLTFChart";
 import ChatWidget from "./components/ChatWidget";
 
 type Risk = "LOW" | "MEDIUM" | "HIGH";
