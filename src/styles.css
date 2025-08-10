@@ -9,3 +9,9 @@
 
 * { box-sizing: border-box; }
 body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji'; }
+
+/* robot animations */
+@keyframes blink { 0%, 92%, 100% { r: 6 } 95% { r: 1 } }
+@keyframes antenna { 0%,100% { transform: rotate(0deg) } 50% { transform: rotate(6deg) } }
+.animate-eye { animation: blink 4s infinite; transform-origin: center; }
+.animate-antenna { animation: antenna 3.5s ease-in-out infinite; }
