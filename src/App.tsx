@@ -1,35 +1,12 @@
 import React, { useMemo, useState } from "react";
 import "./styles.css";
-
 import RobotGLTFChart from "./components/RobotGLTFChart";
-import ChatWidget from "./components/ChatWidget";
 
 type Risk = "LOW" | "MEDIUM" | "HIGH";
 
-const RiskButton = ({
-  r,
-  active,
-  onClick,
-}: {
-  r: Risk;
-  active: boolean;
-  onClick: () => void;
-}) => (
-  <button
-    onClick={onClick}
-    className={`inline-flex items-center justify-center min-w-28 px-6 py-3 rounded-3xl font-extrabold tracking-wide transition ${
-      active
-        ? "text-black bg-[#ffe500] hover:shadow-[0_0_0_2px_rgba(255,229,0,.15),0_0_40px_rgba(255,229,0,.12)]"
-        : "text-yellow-400 bg-[#0f0f11] border border-yellow-500/25 hover:border-yellow-400/60"
-    }`}
-  >
-    {r}
-  </button>
-);
-
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="px-4 py-2 rounded-2xl bg-[#0e0f11] text-yellow-400 border border-yellow-500/20 shadow-[0_0_30px_rgba(255,229,0,.15)]">
+    <div className="px-4 py-2 rounded-2xl bg-neutral-900 text-yellow-400 shadow-[0_0_30px_rgba(255,215,0,.08)]">
       <div className="text-xs text-yellow-300/70">{label}</div>
       <div className="text-xl font-black tracking-wide">{value}</div>
     </div>
@@ -41,172 +18,85 @@ export default function App() {
   const [amount, setAmount] = useState(500);
   const [months, setMonths] = useState(1);
 
-  const pr = useMemo(
-    () => (risk === "LOW" ? 0.05 : risk === "MEDIUM" ? 0.12 : 0.28),
-    [risk]
-  );
-  const projected = useMemo(
-    () => (amount * (1 + pr * months)).toFixed(2),
-    [amount, pr, months]
-  );
+  const apr = useMemo(() => (risk === "LOW" ? 0.05 : risk === "MEDIUM" ? 0.12 : 0.22), [risk]);
+  const payout = useMemo(() => (amount * (1 + apr) ** months).toFixed(2), [amount, months, apr]);
 
   return (
-    <div>
-      {/* NAV */}
-      <nav className="max-w-6xl mx-auto px-6 py-5 flex items-center gap-4 border-b border-yellow-500/15">
-        <div className="h-9 w-9 rounded-md bg-[#ffe500]" />
-        <div className="text-2xl font-black tracking-widest">
-          PAID<span className="bg-[#ffe500] text-black px-1 rounded">OFF</span>
+    <div className="min-h-screen bg-black text-yellow-300 font-sans">
+      <header className="flex items-center justify-between p-4 border-b border-yellow-500/30">
+        <div className="flex items-center gap-2">
+          <div className="h-6 w-6 rounded-sm bg-yellow-400" />
+          <h1 className="font-extrabold tracking-wider text-yellow-300">PAIDOFF</h1>
         </div>
-        <div className="ml-auto hidden md:flex gap-6 text-yellow-300/80">
-          <a href="#" className="hover:text-yellow-200">
-            Whitepaper
-          </a>
-          <a href="#" className="hover:text-yellow-200">
-            Docs
-          </a>
-          <a href="#" className="hover:text-yellow-200">
-            Security
-          </a>
-        </div>
-        <button className="ml-4 inline-flex items-center justify-center px-6 py-3 rounded-3xl font-extrabold tracking-wide transition text-black bg-[#ffe500] hover:shadow-[0_0_0_2px_rgba(255,229,0,.15),0_0_40px_rgba(255,229,0,.12)]">
-          CONNECT WALLET
-        </button>
-      </nav>
+        <nav className="hidden sm:flex gap-8 text-sm text-yellow-200/80">
+          <a>Whitepaper</a>
+          <a>Docs</a>
+          <a>Security</a>
+        </nav>
+        <button className="px-4 py-2 bg-yellow-400 text-black rounded-full font-bold">CONNECT WALLET</button>
+      </header>
 
-      {/* HERO */}
-      <section className="max-w-6xl mx-auto px-6 py-12 grid md:grid-cols-2 gap-10 items-start">
-        {/* LEFT: текст + форма */}
-        <div className="flex flex-col gap-6">
-          <h1 className="text-4xl md:text-5xl font-black leading-tight text-yellow-50 drop-shadow-[0_8px_40px_rgba(255,229,0,0.12)]">
-            Авто-трейдинг на ИИ с фиксированным сроком и риском
-          </h1>
-          <p className="text-yellow-300/80 max-w-[48ch]">
-            Выбери риск-профиль, сумму и срок. Средства блокируются на период, а
-            ИИ-стратегия торгует за тебя.
+      <main className="max-w-6xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <section>
+          <h2 className="text-5xl sm:text-6xl font-extrabold leading-tight text-yellow-300">
+            Авто-трейдинг на ИИ <br /> с фиксированным <br /> сроком и риском
+          </h2>
+
+          <p className="mt-5 text-yellow-200/80">
+            Выбери риск-профиль, сумму и срок. Средства блокируются на период, а ИИ-стратегия торгует за тебя.
           </p>
 
-          <div className="flex gap-3">
+          <div className="mt-6 flex gap-3">
             {(["LOW", "MEDIUM", "HIGH"] as Risk[]).map((r) => (
-              <RiskButton
+              <button
                 key={r}
-                r={r}
-                active={risk === r}
                 onClick={() => setRisk(r)}
-              />
+                className={`px-6 py-3 rounded-full font-bold ${
+                  risk === r ? "bg-yellow-400 text-black" : "bg-neutral-900 text-yellow-300"
+                }`}
+              >
+                {r}
+              </button>
             ))}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs text-yellow-300/70">Сумма (USDT)</label>
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="flex flex-col">
+              <label className="text-xs mb-1 text-yellow-200/70">Сумма (USDT)</label>
               <input
-                className="mt-1 w-full px-4 py-3 rounded-2xl bg-[#0f0f11] border border-yellow-500/15 focus:outline-none focus:border-yellow-400"
                 type="number"
-                min={50}
+                className="bg-neutral-900 border border-yellow-400/30 rounded-xl px-3 py-3 outline-none"
                 value={amount}
-                onChange={(e) => setAmount(Number(e.target.value))}
+                onChange={(e) => setAmount(Number(e.target.value || 0))}
               />
             </div>
-            <div>
-              <label className="text-xs text-yellow-300/70">Срок (мес.)</label>
+            <div className="flex flex-col">
+              <label className="text-xs mb-1 text-yellow-200/70">Срок (мес.)</label>
               <input
-                className="mt-1 w-full px-4 py-3 rounded-2xl bg-[#0f0f11] border border-yellow-500/15 focus:outline-none focus:border-yellow-400"
                 type="number"
-                min={1}
-                max={12}
+                className="bg-neutral-900 border border-yellow-400/30 rounded-xl px-3 py-3 outline-none"
                 value={months}
-                onChange={(e) => setMonths(Number(e.target.value))}
+                onChange={(e) => setMonths(Number(e.target.value || 0))}
               />
             </div>
           </div>
 
-          <div className="flex items-center justify-between p-4 rounded-2xl bg-[#0e0f11] border border-yellow-500/20">
-            <div className="text-yellow-300/80">Прогноз на выплату</div>
-            <div className="text-2xl font-black">
-              {(amount * (1 + pr * months)).toFixed(2)}{" "}
-              <span className="text-sm">USDT</span>
-            </div>
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <Stat label="APR (mo)" value={`${Math.round(apr * 100)}%`} />
+            <Stat label="Прогноз на выплату" value={`${payout} USDT`} />
+            <Stat label="Профиль риска" value={risk} />
           </div>
 
-          <div className="flex gap-3">
-            <button className="inline-flex items-center justify-center px-6 py-4 rounded-3xl font-extrabold tracking-wide text-lg transition text-black bg-[#ffe500] hover:shadow-[0_0_0_2px_rgba(255,229,0,.15),0_0_40px_rgba(255,229,0,.12)]">
-              START AUTO-TRADING
-            </button>
-            <button className="inline-flex items-center justify-center px-6 py-4 rounded-3xl font-extrabold tracking-wide text-lg transition text-yellow-400 bg-[#0f0f11] border border-yellow-500/25 hover:border-yellow-400/60">
-              View Plans
-            </button>
+          <div className="mt-6 flex gap-3">
+            <button className="px-6 py-3 bg-yellow-400 text-black font-black rounded-full">START AUTO-TRADING</button>
+            <button className="px-6 py-3 bg-neutral-900 text-yellow-300 font-bold rounded-full">View Plans</button>
           </div>
+        </section>
 
-          <div className="flex gap-3">
-            <span className="text-xs font-bold px-3 py-1 rounded-xl bg-[#0f0f11] border border-yellow-500/25">
-              Non-custodial
-            </span>
-            <span className="text-xs font-bold px-3 py-1 rounded-xl bg-[#0f0f11] border border-yellow-500/25">
-              AI-Signals
-            </span>
-            <span className="text-xs font-bold px-3 py-1 rounded-xl bg-[#0f0f11] border border-yellow-500/25">
-              Lock: 1–12м
-            </span>
-          </div>
-
-          {/* мини-статики под формой */}
-          <div className="flex gap-3">
-            <Stat label="Risk" value={risk} />
-            <Stat label="APR (mo)" value={(pr * 100).toFixed(0) + "%"} />
-          </div>
-        </div>
-
-        {/* RIGHT: 3D сцена — робот + график */}
-        <RobotChart3D />
-      </section>
-
-      {/* PLANS */}
-      <section className="max-w-6xl mx-auto px-6 pb-16">
-        <h2 className="text-2xl font-black mb-6">Планы</h2>
-        <div className="grid md:grid-cols-3 gap-6">
-          {[
-            {
-              name: "LOW",
-              apr: "~5%/мес",
-              lock: "1–12 мес",
-              desc: "Стабильность для аккуратного прироста.",
-            },
-            {
-              name: "MEDIUM",
-              apr: "~12%/мес",
-              lock: "1–6 мес",
-              desc: "Баланс риска и доходности.",
-            },
-            {
-              name: "HIGH",
-              apr: "~28%/мес",
-              lock: "1–3 мес",
-              desc: "Агрессивная стратегия для максимума.",
-            },
-          ].map((p) => (
-            <div
-              key={p.name}
-              className="bg-[#111214] border border-yellow-500/15 rounded-3xl shadow-[0_10px_30px_rgba(0,0,0,.35)] p-6 flex flex-col gap-3"
-            >
-              <div className="text-lg font-black">{p.name}</div>
-              <div className="text-3xl font-black">{p.apr}</div>
-              <div className="text-yellow-300/80">Lock: {p.lock}</div>
-              <p className="text-yellow-300/70">{p.desc}</p>
-              <button className="inline-flex items-center justify-center px-6 py-3 rounded-3xl font-extrabold tracking-wide transition text-black bg-[#ffe500] hover:shadow-[0_0_0_2px_rgba(255,229,0,.15),0_0_40px_rgba(255,229,0,.12)] mt-2">
-                Выбрать
-              </button>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <footer className="max-w-6xl mx-auto px-6 py-10 text-xs text-yellow-300/60 border-t border-yellow-500/15">
-        © {new Date().getFullYear()} PaidOFF. All rights reserved.
-      </footer>
-
-      {/* Чат-виджет */}
-      <ChatWidget />
+        <section className="rounded-3xl border border-yellow-500/20 bg-neutral-950 shadow-[0_0_50px_rgba(255,215,0,.07)]">
+          <RobotGLTFChart />
+        </section>
+      </main>
     </div>
   );
 }
