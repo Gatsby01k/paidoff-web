@@ -69,9 +69,9 @@ function NeonArm({
     const a = Math.acos(THREE.MathUtils.clamp((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d), -1, 1));
     const b = Math.atan2(ty, tx);
     const shoulderAng = b - a;
-    const elbowAng = Math.PI - Math.acos(
-      THREE.MathUtils.clamp((L1 * L1 + L2 * L2 - d * d) / (2 * L1 * L2), -1, 1)
-    );
+    const elbowAng =
+      Math.PI -
+      Math.acos(THREE.MathUtils.clamp((L1 * L1 + L2 * L2 - d * d) / (2 * L1 * L2), -1, 1));
 
     shoulder.current.rotation.z = THREE.MathUtils.lerp(shoulder.current.rotation.z, shoulderAng, 0.18);
     forearm.current.rotation.z = THREE.MathUtils.lerp(forearm.current.rotation.z, elbowAng, 0.22);
