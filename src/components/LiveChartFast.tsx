@@ -1,121 +1,95 @@
 import React, { useEffect, useRef } from "react";
-import {
-  createChart,
-  ColorType,
-  ISeriesApi,
-  AreaSeriesPartialOptions,
-  Time,
-} from "lightweight-charts";
+import { createChart, ColorType, IChartApi, LineStyle } from "lightweight-charts";
 
-type Risk = "LOW" | "MEDIUM" | "HIGH";
-
-type Props = {
-  risk: Risk;
-};
-
-function aprFor(risk: Risk) {
-  if (risk === "HIGH") return 0.26;
-  if (risk === "MEDIUM") return 0.12;
-  return 0.05;
-}
+type Props = { risk: "LOW" | "MEDIUM" | "HIGH" };
 
 export default function LiveChartFast({ risk }: Props) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const seriesRef = useRef<ISeriesApi<"Area"> | null>(null);
-  const stopRef = useRef<() => void>();
+  const el = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<IChartApi | null>(null);
 
   useEffect(() => {
-    if (!ref.current) return;
+    if (!el.current) return;
 
-    const chart = createChart(ref.current, {
-      autoSize: true,
+    // init
+    const chart = createChart(el.current, {
+      width: el.current.clientWidth,
+      height: el.current.clientHeight,
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "rgba(255,255,255,0.82)",
+        textColor: "#e5e7eb"
       },
       grid: {
-        vertLines: { color: "rgba(255,255,255,0.05)" },
-        horzLines: { color: "rgba(255,255,255,0.07)" },
+        vertLines: { color: "rgba(255,255,255,0.04)" },
+        horzLines: { color: "rgba(255,255,255,0.04)" }
       },
-      rightPriceScale: {
-        borderVisible: false,
-        scaleMargins: { top: 0.1, bottom: 0.15 },
-      },
+      rightPriceScale: { borderVisible: false },
       timeScale: {
         borderVisible: false,
-        rightOffset: 5,
-        barSpacing: 6,
-        fixLeftEdge: false,
-        fixRightEdge: false,
+        secondsVisible: false,
+        timeVisible: true
       },
-      crosshair: {
-        mode: 0,
-      },
+      crosshair: { horzLine: { visible: false }, vertLine: { visible: false } }
     });
 
-    const areaOpts: AreaSeriesPartialOptions = {
-      topColor: "rgba(255, 225, 0, 0.35)",
-      bottomColor: "rgba(255, 225, 0, 0.02)",
-      lineColor: "#FFE500",
-      lineWidth: 2,
-      priceLineVisible: false,
-      lastValueVisible: true,
+    chartRef.current = chart;
+    const green = chart.addAreaSeries({
+      topColor: "rgba(34, 197, 94, .32)",
+      bottomColor: "rgba(34, 197, 94, 0)",
+      lineColor: "#22c55e",
+      lineWidth: 2
+    });
+
+    // seed
+    let t = Date.now() / 1000;
+    let v = 100;
+    const data: { time: number; value: number }[] = [];
+    for (let i = 0; i < 200; i++) {
+      t += 60;
+      v += (Math.random() - 0.5) * 2;
+      data.push({ time: t, value: v });
+    }
+    green.setData(data);
+    chart.timeScale().fitContent();
+
+    // speed depends on risk
+    const speed =
+      risk === "HIGH" ? 40 : risk === "MEDIUM" ? 20 : 10; // points/min
+    const vol =
+      risk === "HIGH" ? 2.4 : risk === "MEDIUM" ? 1.4 : 0.8; // amplitude
+
+    let raf = 0;
+    function loop() {
+      const last = data[data.length - 1];
+      const step = 60 / speed; // seconds per tick
+
+      const nextT = last.time + step;
+      const nextV =
+        last.value +
+        (Math.random() - 0.5) * vol +
+        Math.sin(nextT / 30) * 0.1;
+
+      data.push({ time: nextT, value: nextV });
+      if (data.length > 400) data.shift();
+      green.update({ time: nextT, value: nextV });
+      raf = requestAnimationFrame(loop);
+    }
+    raf = requestAnimationFrame(loop);
+
+    const onResize = () => {
+      if (!el.current) return;
+      chart.applyOptions({
+        width: el.current.clientWidth,
+        height: el.current.clientHeight
+      });
     };
+    window.addEventListener("resize", onResize);
 
-    const series = chart.addAreaSeries(areaOpts);
-    seriesRef.current = series;
-
-    // начальные точки
-    const now = Math.floor(Date.now() / 1000) as Time;
-    const data = Array.from({ length: 120 }).map((_, i) => {
-      const t = (now - (120 - i)) as Time;
-      const v = 1 + Math.sin(i / 11) * 0.15 + Math.random() * 0.05;
-      return { time: t, value: v };
-    });
-    series.setData(data);
-
-    // поток обновлений
-    const speed = 120; // мс — быстрый флов
-    let timer = setInterval(() => {
-      const last = (seriesRef.current!.dataByIndex(
-        seriesRef.current!.data().length - 1
-      ) as any) ?? data[data.length - 1];
-
-      // добавляем немного "волатильности" от риска
-      const vol = aprFor(risk) * 0.6 + 0.02; // чем выше риск, тем шустрее
-      const nextValue = Math.max(
-        0.3,
-        Math.min(2.5, (last.value ?? last?.value ?? 1) + (Math.random() - 0.5) * vol)
-      );
-      const nextTime = (Math.floor(Date.now() / 1000) as Time);
-
-      series.update({ time: nextTime, value: nextValue });
-
-      // плавный автоскролл
-      chart.timeScale().scrollToRealTime();
-    }, speed);
-
-    stopRef.current = () => {
-      clearInterval(timer);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", onResize);
       chart.remove();
     };
-    return () => stopRef.current?.();
   }, [risk]);
 
-  return (
-    <div
-      className="relative w-full h-[380px] rounded-2xl border border-yellow-500/20 overflow-hidden"
-      style={{
-        boxShadow:
-          "0 0 0 1px rgba(255,215,0,.06) inset, 0 20px 60px rgba(0,0,0,.45), 0 0 60px rgba(255,215,0,.06)",
-        background:
-          "radial-gradient(1200px 600px at 20% -20%, rgba(255,231,91,.06), transparent 60%), #050607",
-      }}
-    >
-      <div className="absolute z-10 left-3 top-3 text-xs font-semibold px-2 py-1 rounded-md bg-yellow-400/10 text-yellow-300 border border-yellow-300/30">
-        Signal: {risk}
-      </div>
-      <div ref={ref} className="absolute inset-0" />
-    </div>
-  );
+  return <div ref={el} className="w-full h-full" />;
 }
