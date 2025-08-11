@@ -1,102 +1,130 @@
 import React, { useMemo, useState } from "react";
+import LiveChartFast from "./components/LiveChartFast";
+import RobotQA from "./components/RobotQA";
 import "./styles.css";
-import RobotGLTFChart from "./components/RobotGLTFChart";
 
 type Risk = "LOW" | "MEDIUM" | "HIGH";
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="px-4 py-2 rounded-2xl bg-neutral-900 text-yellow-400 shadow-[0_0_30px_rgba(255,215,0,.08)]">
-      <div className="text-xs text-yellow-300/70">{label}</div>
-      <div className="text-xl font-black tracking-wide">{value}</div>
-    </div>
-  );
+function aprFor(risk: Risk) {
+  if (risk === "HIGH") return 0.26;
+  if (risk === "MEDIUM") return 0.12;
+  return 0.05;
 }
 
 export default function App() {
   const [risk, setRisk] = useState<Risk>("LOW");
-  const [amount, setAmount] = useState(500);
-  const [months, setMonths] = useState(1);
+  const [amount, setAmount] = useState<number>(500);
+  const [months, setMonths] = useState<number>(1);
 
-  const apr = useMemo(() => (risk === "LOW" ? 0.05 : risk === "MEDIUM" ? 0.12 : 0.22), [risk]);
-  const payout = useMemo(() => (amount * (1 + apr) ** months).toFixed(2), [amount, months, apr]);
+  const apr = aprFor(risk);
+  const payout = useMemo(() => {
+    // простая капитализация
+    let v = amount;
+    for (let i = 0; i < months; i++) v *= 1 + apr;
+    return v;
+  }, [amount, months, apr]);
 
   return (
     <div className="min-h-screen bg-black text-yellow-300 font-sans">
-      <header className="flex items-center justify-between p-4 border-b border-yellow-500/30">
-        <div className="flex items-center gap-2">
-          <div className="h-6 w-6 rounded-sm bg-yellow-400" />
-          <h1 className="font-extrabold tracking-wider text-yellow-300">PAIDOFF</h1>
+      {/* Header */}
+      <header className="flex items-center justify-between px-6 py-4 border-b border-yellow-500/10 bg-black/60 backdrop-blur supports-[backdrop-filter]:backdrop-blur-md sticky top-0 z-50">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-yellow-400 rounded-md" />
+          <div className="text-2xl font-extrabold tracking-wide">PAID<span className="text-black bg-yellow-400 px-1 rounded">OFF</span></div>
         </div>
-        <nav className="hidden sm:flex gap-8 text-sm text-yellow-200/80">
-          <a>Whitepaper</a>
-          <a>Docs</a>
-          <a>Security</a>
+        <nav className="hidden md:flex gap-6 text-sm text-yellow-200/80">
+          <a className="hover:text-yellow-200" href="#">Whitepaper</a>
+          <a className="hover:text-yellow-200" href="#">Docs</a>
+          <a className="hover:text-yellow-200" href="#">Security</a>
         </nav>
-        <button className="px-4 py-2 bg-yellow-400 text-black rounded-full font-bold">CONNECT WALLET</button>
+        <button className="px-4 py-2 rounded-xl bg-yellow-400 text-black font-semibold hover:brightness-95">
+          CONNECT WALLET
+        </button>
       </header>
 
-      <main className="max-w-6xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <section>
-          <h2 className="text-5xl sm:text-6xl font-extrabold leading-tight text-yellow-300">
-            Авто-трейдинг на ИИ <br /> с фиксированным <br /> сроком и риском
-          </h2>
+      {/* Hero */}
+      <section className="px-6 md:px-10 lg:px-16 py-10">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
+          {/* left */}
+          <div>
+            <h1 className="text-5xl md:text-6xl font-extrabold leading-tight text-yellow-200">
+              Авто-трейдинг на ИИ<br />с фиксированным<br />сроком и риском
+            </h1>
+            <p className="mt-5 text-yellow-200/80 max-w-xl">
+              Выбери риск-профиль, сумму и срок. Средства блокируются на период, а ИИ-стратегия торгует за тебя.
+            </p>
 
-          <p className="mt-5 text-yellow-200/80">
-            Выбери риск-профиль, сумму и срок. Средства блокируются на период, а ИИ-стратегия торгует за тебя.
-          </p>
+            {/* risk buttons */}
+            <div className="mt-6 flex gap-3">
+              {(["LOW", "MEDIUM", "HIGH"] as Risk[]).map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setRisk(r)}
+                  className={`px-5 py-3 rounded-2xl border ${
+                    risk === r
+                      ? "bg-yellow-400 text-black border-yellow-300"
+                      : "bg-black/30 text-yellow-200 border-yellow-500/20 hover:border-yellow-400/40"
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
 
-          <div className="mt-6 flex gap-3">
-            {(["LOW", "MEDIUM", "HIGH"] as Risk[]).map((r) => (
-              <button
-                key={r}
-                onClick={() => setRisk(r)}
-                className={`px-6 py-3 rounded-full font-bold ${
-                  risk === r ? "bg-yellow-400 text-black" : "bg-neutral-900 text-yellow-300"
-                }`}
-              >
-                {r}
+            {/* inputs */}
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-3 max-w-xl">
+              <div className="p-3 rounded-xl bg-black/30 border border-yellow-500/20">
+                <div className="text-xs text-yellow-400/70 mb-1">Сумма (USDT)</div>
+                <input
+                  className="w-full bg-transparent outline-none text-yellow-100"
+                  type="number"
+                  min={100}
+                  step={50}
+                  value={amount}
+                  onChange={(e) => setAmount(parseFloat(e.target.value || "0"))}
+                />
+              </div>
+              <div className="p-3 rounded-xl bg-black/30 border border-yellow-500/20">
+                <div className="text-xs text-yellow-400/70 mb-1">Срок (мес.)</div>
+                <input
+                  className="w-full bg-transparent outline-none text-yellow-100"
+                  type="number"
+                  min={1}
+                  max={12}
+                  step={1}
+                  value={months}
+                  onChange={(e) => setMonths(parseInt(e.target.value || "1"))}
+                />
+              </div>
+              <div className="p-3 rounded-xl bg-black/30 border border-yellow-500/20">
+                <div className="text-xs text-yellow-400/70 mb-1">APR (мес.)</div>
+                <div className="text-2xl font-extrabold text-yellow-200">{Math.round(apr * 100)}%</div>
+              </div>
+              <div className="p-3 rounded-xl bg-black/30 border border-yellow-500/20">
+                <div className="text-xs text-yellow-400/70 mb-1">Прогноз на выплату</div>
+                <div className="text-2xl font-extrabold text-yellow-200">
+                  {payout.toFixed(2)} <span className="text-xs opacity-60">USDT</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button className="px-5 py-3 rounded-xl bg-yellow-400 text-black font-semibold hover:brightness-95">
+                START AUTO-TRADING
               </button>
-            ))}
-          </div>
-
-          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="flex flex-col">
-              <label className="text-xs mb-1 text-yellow-200/70">Сумма (USDT)</label>
-              <input
-                type="number"
-                className="bg-neutral-900 border border-yellow-400/30 rounded-xl px-3 py-3 outline-none"
-                value={amount}
-                onChange={(e) => setAmount(Number(e.target.value || 0))}
-              />
-            </div>
-            <div className="flex flex-col">
-              <label className="text-xs mb-1 text-yellow-200/70">Срок (мес.)</label>
-              <input
-                type="number"
-                className="bg-neutral-900 border border-yellow-400/30 rounded-xl px-3 py-3 outline-none"
-                value={months}
-                onChange={(e) => setMonths(Number(e.target.value || 0))}
-              />
+              <button className="px-5 py-3 rounded-xl border border-yellow-500/30 bg-black/30 hover:border-yellow-400/50">
+                View Plans
+              </button>
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <Stat label="APR (mo)" value={`${Math.round(apr * 100)}%`} />
-            <Stat label="Прогноз на выплату" value={`${payout} USDT`} />
-            <Stat label="Профиль риска" value={risk} />
+          {/* right: две карточки — график и бот */}
+          <div className="grid grid-cols-1 gap-6">
+            <LiveChartFast risk={risk} />
+            <RobotQA />
           </div>
-
-          <div className="mt-6 flex gap-3">
-            <button className="px-6 py-3 bg-yellow-400 text-black font-black rounded-full">START AUTO-TRADING</button>
-            <button className="px-6 py-3 bg-neutral-900 text-yellow-300 font-bold rounded-full">View Plans</button>
-          </div>
-        </section>
-
-        <section className="rounded-3xl border border-yellow-500/20 bg-neutral-950 shadow-[0_0_50px_rgba(255,215,0,.07)]">
-          <RobotGLTFChart />
-        </section>
-      </main>
+        </div>
+      </section>
     </div>
   );
 }
