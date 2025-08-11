@@ -6,12 +6,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { getDefaultConfig, RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
 import "@rainbow-me/rainbowkit/styles.css";
 
-const wcId = import.meta.env.VITE_WALLETCONNECT_ID || "demo";
+const projectId = import.meta.env.VITE_WALLETCONNECT_ID || "demo";
 
-const config = createConfig(
+// RainbowKit v2 + wagmi v2: сначала getDefaultConfig, потом createConfig
+const wagmiConfig = createConfig(
   getDefaultConfig({
     appName: "PaidOFF",
-    projectId: wcId,
+    projectId,
     chains: [mainnet, base, optimism, arbitrum, polygon, sepolia],
     transports: {
       [mainnet.id]: http(),
@@ -25,17 +26,17 @@ const config = createConfig(
   })
 );
 
-const qc = new QueryClient();
+const queryClient = new QueryClient();
 
 export function WalletProviders({ children }: { children: React.ReactNode }) {
   return (
-    <WagmiProvider config={config}>
-      <QueryClientProvider client={qc}>
+    <WagmiProvider config={wagmiConfig}>
+      <QueryClientProvider client={queryClient}>
         <RainbowKitProvider
           theme={darkTheme({
             borderRadius: "large",
             overlayBlur: "small",
-            accentColor: "#FEE440",
+            accentColor: "#FEE440"
           })}
           modalSize="compact"
         >
