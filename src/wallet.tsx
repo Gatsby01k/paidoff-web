@@ -1,14 +1,23 @@
-// src/wallet.tsx
 import React from "react";
 import { WagmiProvider, createConfig, http } from "wagmi";
-import { mainnet, polygon, arbitrum, base, optimism, sepolia } from "wagmi/chains";
+import {
+  mainnet,
+  polygon,
+  arbitrum,
+  base,
+  optimism,
+  sepolia
+} from "wagmi/chains";
+import {
+  getDefaultConfig,
+  RainbowKitProvider,
+  darkTheme
+} from "@rainbow-me/rainbowkit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { getDefaultConfig, RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
 import "@rainbow-me/rainbowkit/styles.css";
 
 const projectId = import.meta.env.VITE_WALLETCONNECT_ID || "demo";
 
-// RainbowKit v2 + wagmi v2: сначала getDefaultConfig, потом createConfig
 const wagmiConfig = createConfig(
   getDefaultConfig({
     appName: "PaidOFF",
