@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
 export default function RobotQA() {
   const [open, setOpen] = useState(false);
@@ -7,13 +7,19 @@ export default function RobotQA() {
     { role: "bot", text: "Привет! Я бот PaidOFF. Спроси про риски, сроки и доходность." }
   ]);
 
+  // открыть чат извне: window.dispatchEvent(new CustomEvent('po-open-chat'))
+  useEffect(() => {
+    const handler = () => setOpen(true);
+    window.addEventListener("po-open-chat", handler as EventListener);
+    return () => window.removeEventListener("po-open-chat", handler as EventListener);
+  }, []);
+
   function handleSend() {
     const text = inp.trim();
     if (!text) return;
     setMsgs((m) => [...m, { role: "user", text }]);
     setInp("");
 
-    // простая имитация ответа
     const lower = text.toLowerCase();
     let reply =
       "Я анализирую рынок и распределяю риск. Выбери профиль и срок — Я покажу прогноз.";
