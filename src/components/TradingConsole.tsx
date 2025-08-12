@@ -17,13 +17,13 @@ export default function TradingConsole({ risk }: { risk: Risk }) {
     setMsg("");
     setLog((l) => [...l, { from: "user", text: q }]);
 
-    // подсветим "сделку" и движение руки
+    // "сделка": вспышка + искры + резкий доворот руки
     setTrigger((t) => t + 1);
 
     const reply = makeReply(q, risk);
     setTimeout(() => {
       setLog((l) => [...l, { from: "bot", text: reply }]);
-    }, 350);
+    }, 280);
   }
 
   return (
@@ -37,12 +37,12 @@ export default function TradingConsole({ risk }: { risk: Risk }) {
           </button>
         </div>
 
-        {/* Робот + "живой график" */}
+        {/* Turbo-сцена */}
         <div className="h-[360px] md:h-[420px]">
           <RobotAssistantCanvas risk={risk} trigger={trigger} />
         </div>
 
-        {/* Чат снизу — под графиком */}
+        {/* Чат: под сценой, коллапс с анимацией */}
         <div
           className={`transition-all duration-300 ${
             open ? "max-h-56 opacity-100" : "max-h-0 opacity-0"
@@ -51,7 +51,7 @@ export default function TradingConsole({ risk }: { risk: Risk }) {
           <div className="px-4 pb-3 pt-2 border-t border-white/10 bg-black/40 backdrop-blur">
             <div className="max-h-40 overflow-y-auto space-y-2 text-sm py-2">
               {log.length === 0 && (
-                <div className="opacity-60">Я — помощник. Спроси про APR, риск и сроки.</div>
+                <div className="opacity-60">Спроси про APR, риск и сроки — я подскажу.</div>
               )}
               {log.map((m, i) => (
                 <div key={i} className={m.from === "user" ? "text-yellow-200" : "text-neutral-200"}>
@@ -82,16 +82,16 @@ export default function TradingConsole({ risk }: { risk: Risk }) {
 function makeReply(q: string, risk: Risk) {
   const apr = risk === "HIGH" ? 25 : risk === "MEDIUM" ? 12 : 5;
   if (/apr|доход|прибыл/i.test(q))
-    return `Для профиля ${risk} модельный APR ≈ ${apr}%/мес. Реальная доходность зависит от рынка.`;
+    return `Профиль ${risk}: модельный APR ≈ ${apr}%/мес. Реальный результат зависит от рынка.`;
   if (/срок|месяц|period|term/i.test(q))
-    return `Для ${risk} рекомендуем держать от ${
-      risk === "HIGH" ? 3 : 1
-    } до ${risk === "HIGH" ? 6 : 3} месяцев.`;
+    return `Для ${risk} разумный горизонт — ${
+      risk === "HIGH" ? "3–6" : "1–3"
+    } месяцев.`;
   if (/риск|безопас/i.test(q))
     return `Профиль ${risk}: ${
       risk === "HIGH"
-        ? "выше волатильность и потенциальная доходность"
-        : "умеренный риск и более предсказуемый результат"
+        ? "макс. потенциал и волатильность"
+        : "умеренный риск и более стабильная кривая"
     }.`;
-  return "Могу рассказать про APR, риск-профили и рекомендуемые сроки. Спроси 🙂";
+  return "Могу подсказать по рискам, APR и срокам. Спроси 🙂";
 }
