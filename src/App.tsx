@@ -3,8 +3,10 @@ import { ConnectButton } from "@rainbow-me/rainbowkit";
 import LiveChartFast from "./components/LiveChartFast";
 import RobotQA from "./components/RobotQA";
 import RobotAssistantCanvas from "./components/RobotAssistantCanvas";
-
-type Risk = "LOW" | "MEDIUM" | "HIGH";
+import PlanModal from "./components/PlanModal";
+import DepositWizard from "./components/DepositWizard";
+import DepositsTable from "./components/DepositsTable";
+import { Risk } from "./lib/deposits";
 
 export default function App() {
   const [risk, setRisk] = useState<Risk>("LOW");
@@ -23,6 +25,11 @@ export default function App() {
     return total;
   }, [amount, months, apr]);
 
+  // модалки
+  const [planOpen, setPlanOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [flash, setFlash] = useState<string | null>(null);
+
   return (
     <main className="min-h-screen">
       {/* Header */}
@@ -40,6 +47,15 @@ export default function App() {
         </nav>
         <ConnectButton chainStatus="icon" showBalance={false} />
       </header>
+
+      {/* Flash */}
+      {flash && (
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="card border border-yellow-400/20 bg-yellow-400/10 text-yellow-200 p-3 mb-4">
+            {flash}
+          </div>
+        </div>
+      )}
 
       {/* Hero */}
       <section className="max-w-7xl mx-auto px-6 py-8 grid lg:grid-cols-2 gap-8 items-stretch">
@@ -111,8 +127,16 @@ export default function App() {
           </div>
 
           <div className="flex gap-3">
-            <button className="btn-primary px-6 py-4">START AUTO-TRADING</button>
-            <button className="bg-white/5 hover:bg-white/7 rounded-2xl px-6 py-4 font-bold">
+            <button
+              className="btn-primary px-6 py-4"
+              onClick={() => setWizardOpen(true)}
+            >
+              START AUTO-TRADING
+            </button>
+            <button
+              className="bg-white/5 hover:bg-white/7 rounded-2xl px-6 py-4 font-bold"
+              onClick={() => setPlanOpen(true)}
+            >
               View Plans
             </button>
           </div>
@@ -128,12 +152,29 @@ export default function App() {
             </div>
           </div>
 
-          {/* робот-ассистент */}
           <RobotAssistantCanvas
             onAsk={() => window.dispatchEvent(new CustomEvent("po-open-chat"))}
           />
         </div>
       </section>
+
+      {/* Мои депозиты */}
+      <DepositsTable />
+
+      {/* Модалки */}
+      <PlanModal open={planOpen} onClose={() => setPlanOpen(false)} />
+      <DepositWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        amount={amount}
+        months={months}
+        risk={risk}
+        onDone={() => {
+          setWizardOpen(false);
+          setFlash("Депозит создан! Он появится в списке ниже.");
+          setTimeout(() => setFlash(null), 4000);
+        }}
+      />
 
       <RobotQA />
     </main>
