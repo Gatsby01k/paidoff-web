@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import LiveChartFast from "./components/LiveChartFast";
 import RobotQA from "./components/RobotQA";
+import RobotAssistantCanvas from "./components/RobotAssistantCanvas";
 
 type Risk = "LOW" | "MEDIUM" | "HIGH";
 
@@ -17,7 +18,6 @@ export default function App() {
   }, [risk]);
 
   const payout = useMemo(() => {
-    // простая модель: ежемесячно начисляем APR
     let total = amount;
     for (let i = 0; i < months; i++) total *= 1 + apr;
     return total;
@@ -118,13 +118,20 @@ export default function App() {
           </div>
         </div>
 
-        {/* Right: chart */}
-        <div className="glow p-2">
-          <div className="card p-2 h-[420px]">
-            <div className="w-full h-full rounded-2xl overflow-hidden">
-              <LiveChartFast risk={risk} />
+        {/* Right: chart + робот */}
+        <div className="space-y-4">
+          <div className="glow p-2">
+            <div className="card p-2 h-[360px] md:h-[420px]">
+              <div className="w-full h-full rounded-2xl overflow-hidden">
+                <LiveChartFast risk={risk} />
+              </div>
             </div>
           </div>
+
+          {/* робот-ассистент */}
+          <RobotAssistantCanvas
+            onAsk={() => window.dispatchEvent(new CustomEvent("po-open-chat"))}
+          />
         </div>
       </section>
 
