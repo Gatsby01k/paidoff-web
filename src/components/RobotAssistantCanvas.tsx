@@ -3,150 +3,134 @@ import React, { useEffect, useRef } from "react";
 import type { Risk } from "../lib/deposits";
 
 type Props = {
-  trigger?: number; // инкрементируй из родителя, чтобы запустить "вспышку сделки"
-  risk?: Risk;      // влияет на цвет акцента
+  trigger?: number;   // инкремент при вопросе → вспышка/лазер
+  risk?: Risk;        // LOW/MEDIUM/HIGH → цвет акцента
 };
 
-type Particle = {
-  x: number; y: number;
-  vx: number; vy: number;
-  life: number; max: number;
-};
+type Particle = { x: number; y: number; vx: number; vy: number; life: number; max: number };
 
 export default function RobotAssistantCanvas({ trigger = 0, risk = "LOW" }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const stateRef = useRef<any>(null);
-  const gridRef = useRef<HTMLCanvasElement | null>(null);
+  const bgRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     const c = canvasRef.current!;
     const ctx = c.getContext("2d")!;
     const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
 
-    // размеры
+    const ACCENT = risk === "HIGH" ? "#ff5c7a" : risk === "MEDIUM" ? "#f59e0b" : "#22c55e";
+    const ACCENT_SOFT = hex(ACCENT, 0.25);
+
     function resize() {
-      const w = c.clientWidth;
-      const h = c.clientHeight;
+      const w = c.clientWidth, h = c.clientHeight;
       c.width = Math.floor(w * DPR);
       c.height = Math.floor(h * DPR);
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-      // пересоберём грид
-      gridRef.current = buildGrid(w, h);
+      bgRef.current = buildBackground(w, h);
     }
     resize();
     window.addEventListener("resize", resize);
 
-    // цвет по риску
-    const ACCENT = risk === "HIGH" ? "#ff5c7a" : risk === "MEDIUM" ? "#F59E0B" : "#22c55e";
+    // ----- состояние сцены -----
+    const W = () => c.clientWidth, H = () => c.clientHeight;
 
-    // начальное состояние
-    const W = () => c.clientWidth;
-    const H = () => c.clientHeight;
+    // поток «цены»
+    const MAX = 240;
+    const series: number[] = Array.from({ length: MAX }, (_, i) => 0.55 + 0.15 * Math.sin(i / 7));
 
-    const series: number[] = [];
-    const MAX = 220; // количество точек
-    for (let i = 0; i < MAX; i++) series.push(0.55 + 0.15 * Math.sin(i / 8));
+    // робот: плечо (якорь)
+    const shoulder = { x: () => W() * 0.56, y: () => H() * 0.64 };
+    // длины руки
+    const L1 = () => Math.min(W(), H()) * 0.20;
+    const L2 = () => Math.min(W(), H()) * 0.15;
 
-    const particles: Particle[] = [];
+    // углы для IK (сглаживаем)
+    let a1 = -0.2, a2 = 0.9;
 
-    // плечо (позиция робота)
-    const shoulder = { x: () => W() * 0.56, y: () => H() * 0.62 };
-    // длины сегментов руки (в px)
-    const L1 = () => Math.min(W(), H()) * 0.18;
-    const L2 = () => Math.min(W(), H()) * 0.14;
+    // частицы и луч
+    const sparks: Particle[] = [];
+    let beamT = 0; // 0..1 — анимация «лазера»
 
-    // углы для IK (гладко апдейтим)
-    let a1 = 0, a2 = 0;
+    // блики/шлейф у бегущей точки
+    const trail: { x: number; y: number; life: number }[] = [];
 
-    // смещения шума
-    let t0 = performance.now();
-    let lastPointTime = 0;
+    let tLast = performance.now();
+    let accum = 0;
+    let raf = 0;
 
-    // цель руки = последняя точка "цены"
-    function target() {
-      const y = series[series.length - 1]; // 0..1
-      return {
-        x: W() * 0.92,
-        y: H() * (0.08 + (1 - y) * 0.84),
-      };
-    }
+    function step(t: number) {
+      const dt = t - tLast;
+      tLast = t;
+      accum += dt;
 
-    function spawnBurst(x: number, y: number, color: string) {
-      for (let i = 0; i < 36; i++) {
-        const ang = (Math.PI * 2 * i) / 36 + Math.random() * 0.2;
-        const spd = 1.2 + Math.random() * 2.2;
-        particles.push({
-          x, y,
-          vx: Math.cos(ang) * spd,
-          vy: Math.sin(ang) * spd,
-          life: 0,
-          max: 450 + Math.random() * 350,
-        });
-      }
-    }
-
-    function step(now: number) {
-      const dt = now - t0;
-      t0 = now;
-
-      // --- обновляем серию (быстрый поток)
-      lastPointTime += dt;
-      const ADD_MS = 45; // чем меньше — тем быстрее кривая
-      while (lastPointTime > ADD_MS) {
-        lastPointTime -= ADD_MS;
+      // обновление серии (скорость — бодрая)
+      const ADD = 42;
+      while (accum > ADD) {
+        accum -= ADD;
         const last = series[series.length - 1];
-        const drift = Math.sin(now / 1200) * 0.004;
-        let next = last + (Math.random() - 0.5) * 0.04 + drift;
-        next = Math.max(0.06, Math.min(0.94, next));
+        const drift = Math.sin(t / 1100) * 0.003;
+        let next = last + (Math.random() - 0.5) * 0.045 + drift;
+        next = clamp(next, 0.06, 0.94);
         series.push(next);
         if (series.length > MAX) series.shift();
       }
 
-      // --- IK до цели
-      const tgt = target();
+      // цель = последняя точка
+      const ex = W() * 0.93;
+      const ey = H() * (0.08 + (1 - series[series.length - 1]) * 0.84);
+
+      // IK (двухзвенная рука)
       const sx = shoulder.x(), sy = shoulder.y();
-      const dx = tgt.x - sx, dy = tgt.y - sy;
+      const dx = ex - sx, dy = ey - sy;
       const dist = Math.hypot(dx, dy);
       const l1 = L1(), l2 = L2();
-      const clamped = Math.min(Math.max(dist, 0.0001), l1 + l2 - 0.0001);
+      const d = clamp(dist, 0.0001, l1 + l2 - 0.0001);
 
-      // косинусная теорема
       const base = Math.atan2(dy, dx);
-      const cos1 = (l1 * l1 + clamped * clamped - l2 * l2) / (2 * l1 * clamped);
-      const cos2 = (l1 * l1 + l2 * l2 - clamped * clamped) / (2 * l1 * l2);
-      const ta1 = base - Math.acos(Math.max(-1, Math.min(1, cos1)));
-      const ta2 = Math.PI - Math.acos(Math.max(-1, Math.min(1, cos2)));
+      const cos1 = clamp((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1);
+      const cos2 = clamp((l1 * l1 + l2 * l2 - d * d) / (2 * l1 * l2), -1, 1);
+      const ta1 = base - Math.acos(cos1);
+      const ta2 = Math.PI - Math.acos(cos2);
 
-      // сгладим углы (быстро, но без рывков)
-      const ALPHA = 0.25;
-      a1 = a1 + (ta1 - a1) * ALPHA;
-      a2 = a2 + (ta2 - a2) * ALPHA;
+      const ALPHA = 0.28;
+      a1 += (ta1 - a1) * ALPHA;
+      a2 += (ta2 - a2) * ALPHA;
 
-      // --- частицы
-      for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
+      // искры
+      for (let i = sparks.length - 1; i >= 0; i--) {
+        const p = sparks[i];
         p.life += dt;
         p.x += p.vx;
         p.y += p.vy;
-        p.vy += 0.01; // лёгкая "гравитация"
-        if (p.life > p.max) particles.splice(i, 1);
+        p.vy += 0.012; // лёгкая гравитация
+        if (p.life > p.max) sparks.splice(i, 1);
       }
 
-      // --- рисуем
-      draw(ctx, W(), H(), series, ACCENT, sx, sy, a1, a2, l1, l2, particles, gridRef.current);
+      // луч затухает
+      beamT = Math.max(0, beamT - dt / 300);
+
+      // trail
+      trail.push({ x: ex, y: ey, life: 600 });
+      while (trail.length > 40) trail.shift();
+      for (const t of trail) t.life -= dt;
+
+      // ---- отрисовка ----
+      draw(ctx, bgRef.current, W(), H(), series, ACCENT, ACCENT_SOFT, sx, sy, a1, a2, l1, l2, ex, ey, sparks, beamT, trail);
 
       raf = requestAnimationFrame(step);
     }
 
-    // слушаем триггеры "сделки"
-    let lastTrigger = trigger;
-    let raf = requestAnimationFrame(step);
+    raf = requestAnimationFrame(step);
 
+    // запуск «сделки»: вспышка + луч + искры
+    let lastTrig = trigger;
     const id = setInterval(() => {
-      if (trigger !== lastTrigger) {
-        lastTrigger = trigger;
-        const t = target();
-        spawnBurst(t.x, t.y, ACCENT);
+      if (trigger !== lastTrig) {
+        lastTrig = trigger;
+        beamT = 1;
+        const ex = W() * 0.93;
+        const ey = H() * (0.08 + (1 - series[series.length - 1]) * 0.84);
+        spawnSparks(sparks, ex, ey, ACCENT);
       }
     }, 60);
 
@@ -155,7 +139,6 @@ export default function RobotAssistantCanvas({ trigger = 0, risk = "LOW" }: Prop
       clearInterval(id);
       window.removeEventListener("resize", resize);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trigger, risk]);
 
   return (
@@ -165,21 +148,24 @@ export default function RobotAssistantCanvas({ trigger = 0, risk = "LOW" }: Prop
   );
 }
 
-/* ---------------- helpers ---------------- */
+/* ------------------- helpers ------------------- */
 
-function buildGrid(w: number, h: number) {
+function buildBackground(w: number, h: number) {
   const off = document.createElement("canvas");
   off.width = w;
   off.height = h;
   const g = off.getContext("2d")!;
-  // фон
-  const grad = g.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, "#0b0b0b");
-  grad.addColorStop(1, "#090909");
-  g.fillStyle = grad;
+
+  // градиентная «аура»
+  const rad = g.createRadialGradient(w * 0.2, h * 0.1, 80, w * 0.5, h * 0.5, Math.max(w, h));
+  rad.addColorStop(0, "rgba(254, 228, 64, 0.06)");
+  rad.addColorStop(1, "rgba(0, 0, 0, 0)");
+  g.fillStyle = "#0a0a0a";
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = rad;
   g.fillRect(0, 0, w, h);
 
-  // сетка
+  // тонкая сетка
   g.strokeStyle = "rgba(255,255,255,0.06)";
   g.lineWidth = 1;
   for (let x = 0; x < w; x += 32) {
@@ -188,171 +174,181 @@ function buildGrid(w: number, h: number) {
   for (let y = 0; y < h; y += 32) {
     g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke();
   }
+
   return off;
 }
 
 function draw(
   ctx: CanvasRenderingContext2D,
+  bg: HTMLCanvasElement | null,
   w: number,
   h: number,
   series: number[],
-  accent: string,
+  ACCENT: string,
+  ACCENT_SOFT: string,
   sx: number, sy: number,
   a1: number, a2: number,
   L1: number, L2: number,
-  particles: Particle[],
-  grid: HTMLCanvasElement | null
+  ex: number, ey: number,
+  sparks: Particle[],
+  beamT: number,
+  trail: { x: number; y: number; life: number }[]
 ) {
-  // очистка + фон/грид
   ctx.clearRect(0, 0, w, h);
-  if (grid) ctx.drawImage(grid, 0, 0, w, h);
+  if (bg) ctx.drawImage(bg, 0, 0, w, h);
 
-  // неоновая тень
-  ctx.save();
-  ctx.globalCompositeOperation = "lighter";
+  // неоновая линия + area
+  const ox = w * 0.05, rx = w * 0.93;
+  const yOf = (v: number) => h * (0.08 + (1 - v) * 0.84);
 
-  // путь кривой
-  const ox = w * 0.05;
-  const ex = w * 0.92;
-  const baseY = (val: number) => h * (0.08 + (1 - val) * 0.84);
-
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = accent;
-  ctx.beginPath();
-  for (let i = 0; i < series.length; i++) {
-    const x = ox + (i / (series.length - 1)) * (ex - ox);
-    const y = baseY(series[i]);
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
-  ctx.shadowBlur = 12;
-  ctx.shadowColor = accent;
-  ctx.stroke();
-
-  // area под кривой
-  const lastY = baseY(series[series.length - 1]);
+  // area
   const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, hexToRgba(accent, 0.18));
-  grad.addColorStop(1, hexToRgba(accent, 0));
+  grad.addColorStop(0, ACCENT_SOFT);
+  grad.addColorStop(1, "rgba(0,0,0,0)");
   ctx.fillStyle = grad;
   ctx.beginPath();
   ctx.moveTo(ox, h * 0.92);
   for (let i = 0; i < series.length; i++) {
-    const x = ox + (i / (series.length - 1)) * (ex - ox);
-    const y = baseY(series[i]);
+    const x = ox + (i / (series.length - 1)) * (rx - ox);
+    const y = yOf(series[i]);
     ctx.lineTo(x, y);
   }
-  ctx.lineTo(ex, h * 0.92);
+  ctx.lineTo(rx, h * 0.92);
   ctx.closePath();
   ctx.fill();
 
-  // бегущая точка + пульс
-  ctx.shadowBlur = 20;
-  ctx.fillStyle = accent;
-  ctx.strokeStyle = "rgba(255,255,255,0.45)";
+  // линия
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = ACCENT;
+  ctx.shadowBlur = 14;
+  ctx.shadowColor = ACCENT;
   ctx.beginPath();
-  ctx.arc(ex, lastY, 6, 0, Math.PI * 2);
-  ctx.fill();
+  for (let i = 0; i < series.length; i++) {
+    const x = ox + (i / (series.length - 1)) * (rx - ox);
+    const y = yOf(series[i]);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
   ctx.stroke();
+  ctx.restore();
 
-  // частицы-искры
-  for (const p of particles) {
-    const k = 1 - p.life / p.max;
-    const r = 2 + 2 * k;
-    ctx.shadowBlur = 10;
-    ctx.fillStyle = hexToRgba("#ffffff", 0.35 * k);
+  // шлейф точки
+  for (const t of trail) {
+    if (t.life <= 0) continue;
+    const k = t.life / 600;
+    const r = 6 + 26 * k;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.shadowBlur = 18;
-    ctx.fillStyle = hexToRgba(accent, 0.6 * k);
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, r * 0.8, 0, Math.PI * 2);
+    ctx.fillStyle = hex(ACCENT, 0.25 * k);
+    ctx.arc(t.x, t.y, r, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  ctx.restore();
+  // бегущая точка
+  ctx.beginPath();
+  ctx.fillStyle = ACCENT;
+  ctx.strokeStyle = "rgba(255,255,255,0.5)";
+  ctx.arc(ex, ey, 6, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
 
-  // робот: тело
-  roundedRect(ctx, sx - 70, sy - 44, 140, 120, 20, "#1f2937", "rgba(255,255,255,0.1)");
+  // луч (beamT 0..1)
+  if (beamT > 0.01) {
+    const k = beamT;
+    const ex1 = sx + Math.cos(a1) * L1;
+    const ey1 = sy + Math.sin(a1) * L1;
 
-  // голова (сканирующие глаза)
-  roundedRect(ctx, sx - 30, sy - 108, 60, 52, 12, "#111827", "rgba(255,255,255,0.15)");
-  const blink = 0.5 + 0.5 * Math.sin(performance.now() / 300);
-  circle(ctx, sx - 12, sy - 82, 4, hexToRgba(accent, 0.7 + 0.3 * blink));
-  circle(ctx, sx + 12, sy - 82, 4, hexToRgba(accent, 0.7 + 0.3 * (1 - blink)));
+    // яркий сердцевинный луч
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = hex(ACCENT, 0.6 * k);
+    ctx.lineWidth = 6 * k;
+    ctx.shadowBlur = 24;
+    ctx.shadowColor = ACCENT;
+    ctx.beginPath(); ctx.moveTo(ex1, ey1); ctx.lineTo(ex, ey); ctx.stroke();
 
-  // рука (2 сегмента IK)
+    // внешнее глоу
+    ctx.strokeStyle = hex(ACCENT, 0.18 * k);
+    ctx.lineWidth = 16 * k;
+    ctx.shadowBlur = 40;
+    ctx.beginPath(); ctx.moveTo(ex1, ey1); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.restore();
+  }
+
+  // рука: плечо → локоть → кисть (с «энергетической лентой»)
   const ex1 = sx + Math.cos(a1) * L1;
   const ey1 = sy + Math.sin(a1) * L1;
   const hx = ex1 + Math.cos(a1 + a2) * L2;
   const hy = ey1 + Math.sin(a1 + a2) * L2;
 
-  // плечо → локоть
-  ctx.lineWidth = 10;
-  ctx.strokeStyle = hexToRgba(accent, 0.95);
-  ctx.shadowBlur = 12;
-  ctx.shadowColor = accent;
-  ctx.beginPath();
-  ctx.moveTo(sx, sy);
-  ctx.lineTo(ex1, ey1);
-  ctx.stroke();
-
-  // локоть → кисть
-  ctx.beginPath();
-  ctx.moveTo(ex1, ey1);
-  ctx.lineTo(hx, hy);
-  ctx.stroke();
+  // энергетическая лента (две параллельные полупрозрачные)
+  for (const wv of [10, 6]) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = wv === 10 ? hex(ACCENT, 0.25) : hex(ACCENT, 0.6);
+    ctx.lineWidth = wv;
+    ctx.shadowBlur = wv === 10 ? 18 : 12;
+    ctx.shadowColor = ACCENT;
+    ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex1, ey1); ctx.lineTo(hx, hy); ctx.stroke();
+    ctx.restore();
+  }
 
   // кисть
-  ctx.shadowBlur = 16;
-  circle(ctx, hx, hy, 10, accent);
+  glowCircle(ctx, hx, hy, 10, ACCENT);
 
-  // рамка карточки
+  // тело робота
+  rounded(ctx, sx - 74, sy - 48, 148, 124, 22, "#1f2937", "rgba(255,255,255,0.1)");
+  // голова + визор-скан
+  rounded(ctx, sx - 34, sy - 116, 68, 56, 14, "#111827", "rgba(255,255,255,0.14)");
+  const scan = 0.5 + 0.5 * Math.sin(performance.now() / 340);
+  ctx.fillStyle = hex(ACCENT, 0.6);
+  ctx.fillRect(sx - 22, sy - 90, 44 * scan, 6);
+
+  // частицы
+  for (const p of sparks) {
+    const k = 1 - p.life / p.max;
+    const r = 2 + 2 * k;
+    glowCircle(ctx, p.x, p.y, r, hex("#ffffff", 0.35 * k));
+    glowCircle(ctx, p.x, p.y, r * 0.9, hex(ACCENT, 0.6 * k));
+  }
+
+  // рамка
   ctx.lineWidth = 1.5;
-  ctx.shadowBlur = 0;
   ctx.strokeStyle = "rgba(255,255,255,0.08)";
-  roundedRectStroke(ctx, 1.5, 1.5, w - 3, h - 3, 22);
+  roundedStroke(ctx, 1.5, 1.5, w - 3, h - 3, 22);
 }
 
-function hexToRgba(hex: string, a: number) {
-  const n = hex.replace("#", "");
-  const r = parseInt(n.substring(0, 2), 16);
-  const g = parseInt(n.substring(2, 4), 16);
-  const b = parseInt(n.substring(4, 6), 16);
-  return `rgba(${r},${g},${b},${a})`;
-}
-
-function circle(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, fill: string) {
-  ctx.fillStyle = fill;
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-}
-
-function roundedRect(
-  ctx: CanvasRenderingContext2D,
-  x: number, y: number, w: number, h: number, r: number,
-  fill = "#111", stroke = "transparent"
-) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-  ctx.fillStyle = fill;
-  ctx.fill();
-  if (stroke !== "transparent") {
-    ctx.strokeStyle = stroke;
-    ctx.stroke();
+function spawnSparks(arr: Particle[], x: number, y: number, col: string) {
+  for (let i = 0; i < 42; i++) {
+    const a = (Math.PI * 2 * i) / 42 + (Math.random() - 0.5) * 0.25;
+    const s = 1.2 + Math.random() * 2.4;
+    arr.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 0, max: 520 + Math.random() * 380 });
   }
 }
 
-function roundedRectStroke(
-  ctx: CanvasRenderingContext2D,
-  x: number, y: number, w: number, h: number, r: number
-) {
+function glowCircle(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, color: string) {
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.shadowBlur = 16;
+  ctx.shadowColor = color;
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function rounded(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number, fill: string, stroke: string) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+  ctx.fillStyle = fill; ctx.fill();
+  ctx.strokeStyle = stroke; ctx.stroke();
+}
+
+function roundedStroke(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.arcTo(x + w, y, x + w, y + h, r);
@@ -361,4 +357,11 @@ function roundedRectStroke(
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
   ctx.stroke();
+}
+
+function clamp(v: number, a: number, b: number) { return Math.max(a, Math.min(b, v)); }
+function hex(hex: string, a: number) {
+  const n = hex.replace("#", "");
+  const r = parseInt(n.slice(0, 2), 16), g = parseInt(n.slice(2, 4), 16), b = parseInt(n.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${a})`;
 }
