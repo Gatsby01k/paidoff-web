@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import LiveChartFast from "./components/LiveChartFast";
 import RobotQA from "./components/RobotQA";
@@ -7,11 +7,20 @@ import PlanModal from "./components/PlanModal";
 import DepositWizard from "./components/DepositWizard";
 import DepositsTable from "./components/DepositsTable";
 import { Risk } from "./lib/deposits";
+import { decodePlan, encodePlan } from "./lib/share";
 
 export default function App() {
   const [risk, setRisk] = useState<Risk>("LOW");
   const [amount, setAmount] = useState<number>(500);
   const [months, setMonths] = useState<number>(1);
+
+  // init from URL (?risk=…&amount=…&months=…)
+  useEffect(() => {
+    const init = decodePlan(window.location.search);
+    if (init.risk) setRisk(init.risk);
+    if (typeof init.amount === "number") setAmount(init.amount);
+    if (typeof init.months === "number") setMonths(init.months);
+  }, []);
 
   const apr = useMemo(() => {
     if (risk === "HIGH") return 0.25;
@@ -25,10 +34,23 @@ export default function App() {
     return total;
   }, [amount, months, apr]);
 
-  // модалки
   const [planOpen, setPlanOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
+
+  function sharePlan() {
+    const url = encodePlan({ risk, amount, months });
+    navigator.clipboard
+      .writeText(url)
+      .then(() => {
+        setFlash("Ссылка на план скопирована!");
+        setTimeout(() => setFlash(null), 2500);
+      })
+      .catch(() => {
+        setFlash("Не удалось скопировать ссылку");
+        setTimeout(() => setFlash(null), 2500);
+      });
+  }
 
   return (
     <main className="min-h-screen">
@@ -138,6 +160,13 @@ export default function App() {
               onClick={() => setPlanOpen(true)}
             >
               View Plans
+            </button>
+            <button
+              className="bg-white/5 hover:bg-white/7 rounded-2xl px-6 py-4 font-bold"
+              onClick={sharePlan}
+              title="Скопировать ссылку на текущую конфигурацию"
+            >
+              Share plan
             </button>
           </div>
         </div>
