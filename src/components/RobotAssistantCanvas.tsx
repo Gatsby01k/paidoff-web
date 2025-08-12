@@ -2,14 +2,17 @@
 import React, { useEffect, useRef } from "react";
 import type { Risk } from "../lib/deposits";
 
+type Trade = { side: "LONG" | "SHORT"; change: number };
+
 type Props = {
-  trigger?: number;   // инкремент при вопросе → вспышка/лазер
-  risk?: Risk;        // LOW/MEDIUM/HIGH → цвет акцента
+  trigger?: number;      // инкремент при вопросе → вспышка/лазер/бейдж сделки
+  risk?: Risk;           // LOW/MEDIUM/HIGH → цвет/скорость
+  trade?: Trade | null;  // чтобы отрисовать бейдж возле точки входа
 };
 
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; max: number };
 
-export default function RobotAssistantCanvas({ trigger = 0, risk = "LOW" }: Props) {
+export default function RobotAssistantCanvas({ trigger = 0, risk = "LOW", trade = null }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const bgRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -18,11 +21,16 @@ export default function RobotAssistantCanvas({ trigger = 0, risk = "LOW" }: Prop
     const ctx = c.getContext("2d")!;
     const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
 
-    const ACCENT = risk === "HIGH" ? "#ff5c7a" : risk === "MEDIUM" ? "#f59e0b" : "#22c55e";
-    const ACCENT_SOFT = hex(ACCENT, 0.25);
+    const ACCENT =
+      risk === "HIGH" ? "#ff5c7a" : risk === "MEDIUM" ? "#f59e0b" : "#22c55e";
+
+    // скорость/волатильность графика по риску
+    const SPEED_MS = risk === "HIGH" ? 34 : risk === "MEDIUM" ? 42 : 54;
+    const NOISE = risk === "HIGH" ? 0.055 : risk === "MEDIUM" ? 0.045 : 0.03;
 
     function resize() {
-      const w = c.clientWidth, h = c.clientHeight;
+      const w = c.clientWidth,
+        h = c.clientHeight;
       c.width = Math.floor(w * DPR);
       c.height = Math.floor(h * DPR);
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -31,68 +39,69 @@ export default function RobotAssistantCanvas({ trigger = 0, risk = "LOW" }: Prop
     resize();
     window.addEventListener("resize", resize);
 
-    // ----- состояние сцены -----
-    const W = () => c.clientWidth, H = () => c.clientHeight;
+    const W = () => c.clientWidth,
+      H = () => c.clientHeight;
 
     // поток «цены»
-    const MAX = 240;
+    const MAX = 260;
     const series: number[] = Array.from({ length: MAX }, (_, i) => 0.55 + 0.15 * Math.sin(i / 7));
 
-    // робот: плечо (якорь)
+    // робот: плечо
     const shoulder = { x: () => W() * 0.56, y: () => H() * 0.64 };
-    // длины руки
     const L1 = () => Math.min(W(), H()) * 0.20;
     const L2 = () => Math.min(W(), H()) * 0.15;
+    let a1 = -0.2,
+      a2 = 0.9;
 
-    // углы для IK (сглаживаем)
-    let a1 = -0.2, a2 = 0.9;
-
-    // частицы и луч
+    // эффекты
     const sparks: Particle[] = [];
-    let beamT = 0; // 0..1 — анимация «лазера»
-
-    // блики/шлейф у бегущей точки
+    let beamT = 0; // 0..1
+    // трейл бегущей точки
     const trail: { x: number; y: number; life: number }[] = [];
 
-    let tLast = performance.now();
-    let accum = 0;
+    // бейдж сделки (показывается 1.6s)
+    let badgeT = 0; // 0..1600 ms
+    let lastTrig = trigger;
+
+    // цикл
+    let tPrev = performance.now();
+    let acc = 0;
     let raf = 0;
 
     function step(t: number) {
-      const dt = t - tLast;
-      tLast = t;
-      accum += dt;
+      const dt = t - tPrev;
+      tPrev = t;
+      acc += dt;
 
-      // обновление серии (скорость — бодрая)
-      const ADD = 42;
-      while (accum > ADD) {
-        accum -= ADD;
+      // обновление потока
+      while (acc > SPEED_MS) {
+        acc -= SPEED_MS;
         const last = series[series.length - 1];
         const drift = Math.sin(t / 1100) * 0.003;
-        let next = last + (Math.random() - 0.5) * 0.045 + drift;
+        let next = last + (Math.random() - 0.5) * NOISE + drift;
         next = clamp(next, 0.06, 0.94);
         series.push(next);
         if (series.length > MAX) series.shift();
       }
 
-      // цель = последняя точка
       const ex = W() * 0.93;
       const ey = H() * (0.08 + (1 - series[series.length - 1]) * 0.84);
 
-      // IK (двухзвенная рука)
-      const sx = shoulder.x(), sy = shoulder.y();
-      const dx = ex - sx, dy = ey - sy;
+      // IK
+      const sx = shoulder.x(),
+        sy = shoulder.y();
+      const dx = ex - sx,
+        dy = ey - sy;
       const dist = Math.hypot(dx, dy);
-      const l1 = L1(), l2 = L2();
+      const l1 = L1(),
+        l2 = L2();
       const d = clamp(dist, 0.0001, l1 + l2 - 0.0001);
-
       const base = Math.atan2(dy, dx);
       const cos1 = clamp((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1);
       const cos2 = clamp((l1 * l1 + l2 * l2 - d * d) / (2 * l1 * l2), -1, 1);
       const ta1 = base - Math.acos(cos1);
       const ta2 = Math.PI - Math.acos(cos2);
-
-      const ALPHA = 0.28;
+      const ALPHA = 0.3;
       a1 += (ta1 - a1) * ALPHA;
       a2 += (ta2 - a2) * ALPHA;
 
@@ -102,44 +111,60 @@ export default function RobotAssistantCanvas({ trigger = 0, risk = "LOW" }: Prop
         p.life += dt;
         p.x += p.vx;
         p.y += p.vy;
-        p.vy += 0.012; // лёгкая гравитация
+        p.vy += 0.012;
         if (p.life > p.max) sparks.splice(i, 1);
       }
 
-      // луч затухает
+      // затухание луча
       beamT = Math.max(0, beamT - dt / 300);
 
-      // trail
+      // трейл
       trail.push({ x: ex, y: ey, life: 600 });
       while (trail.length > 40) trail.shift();
       for (const t of trail) t.life -= dt;
 
-      // ---- отрисовка ----
-      draw(ctx, bgRef.current, W(), H(), series, ACCENT, ACCENT_SOFT, sx, sy, a1, a2, l1, l2, ex, ey, sparks, beamT, trail);
+      // триггер сделки: вспышка + искры + бейдж
+      if (trigger !== lastTrig) {
+        lastTrig = trigger;
+        beamT = 1;
+        spawnSparks(sparks, ex, ey, ACCENT);
+        badgeT = 1600;
+      }
+      if (badgeT > 0) badgeT -= dt;
+
+      // рисуем
+      draw(
+        ctx,
+        bgRef.current,
+        W(),
+        H(),
+        series,
+        ACCENT,
+        sx,
+        sy,
+        a1,
+        a2,
+        l1,
+        l2,
+        ex,
+        ey,
+        sparks,
+        beamT,
+        trail,
+        trade && badgeT > 0 ? trade : null,
+        badgeT > 0 ? badgeT / 1600 : 0
+      );
 
       raf = requestAnimationFrame(step);
     }
 
     raf = requestAnimationFrame(step);
 
-    // запуск «сделки»: вспышка + луч + искры
-    let lastTrig = trigger;
-    const id = setInterval(() => {
-      if (trigger !== lastTrig) {
-        lastTrig = trigger;
-        beamT = 1;
-        const ex = W() * 0.93;
-        const ey = H() * (0.08 + (1 - series[series.length - 1]) * 0.84);
-        spawnSparks(sparks, ex, ey, ACCENT);
-      }
-    }, 60);
-
     return () => {
       cancelAnimationFrame(raf);
-      clearInterval(id);
       window.removeEventListener("resize", resize);
     };
-  }, [trigger, risk]);
+  }, [trigger, risk, trade]);
 
   return (
     <div className="card p-2 h-full">
@@ -148,33 +173,44 @@ export default function RobotAssistantCanvas({ trigger = 0, risk = "LOW" }: Prop
   );
 }
 
-/* ------------------- helpers ------------------- */
+/* ---------------- helpers ---------------- */
 
 function buildBackground(w: number, h: number) {
   const off = document.createElement("canvas");
   off.width = w;
   off.height = h;
   const g = off.getContext("2d")!;
-
-  // градиентная «аура»
-  const rad = g.createRadialGradient(w * 0.2, h * 0.1, 80, w * 0.5, h * 0.5, Math.max(w, h));
-  rad.addColorStop(0, "rgba(254, 228, 64, 0.06)");
-  rad.addColorStop(1, "rgba(0, 0, 0, 0)");
-  g.fillStyle = "#0a0a0a";
+  // фон
+  const grad = g.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, "#0b0b0b");
+  grad.addColorStop(1, "#090909");
+  g.fillStyle = grad;
   g.fillRect(0, 0, w, h);
-  g.fillStyle = rad;
-  g.fillRect(0, 0, w, h);
-
-  // тонкая сетка
+  // сетка
   g.strokeStyle = "rgba(255,255,255,0.06)";
   g.lineWidth = 1;
   for (let x = 0; x < w; x += 32) {
-    g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke();
+    g.beginPath();
+    g.moveTo(x, 0);
+    g.lineTo(x, h);
+    g.stroke();
   }
   for (let y = 0; y < h; y += 32) {
-    g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke();
+    g.beginPath();
+    g.moveTo(0, y);
+    g.lineTo(w, y);
+    g.stroke();
   }
-
+  // «звезды»
+  for (let i = 0; i < 70; i++) {
+    const x = ((i * 137) % w) * (i % 3 ? 1 : 0.8);
+    const y = ((i * 263) % h) * (i % 2 ? 1 : 0.9);
+    const r = (i % 3) * 0.6 + 0.4;
+    g.fillStyle = "rgba(255,255,255,0.13)";
+    g.beginPath();
+    g.arc(x, y, r, 0, Math.PI * 2);
+    g.fill();
+  }
   return off;
 }
 
@@ -185,25 +221,30 @@ function draw(
   h: number,
   series: number[],
   ACCENT: string,
-  ACCENT_SOFT: string,
-  sx: number, sy: number,
-  a1: number, a2: number,
-  L1: number, L2: number,
-  ex: number, ey: number,
+  sx: number,
+  sy: number,
+  a1: number,
+  a2: number,
+  L1: number,
+  L2: number,
+  ex: number,
+  ey: number,
   sparks: Particle[],
   beamT: number,
-  trail: { x: number; y: number; life: number }[]
+  trail: { x: number; y: number; life: number }[],
+  trade: { side: "LONG" | "SHORT"; change: number } | null,
+  badgeK: number
 ) {
   ctx.clearRect(0, 0, w, h);
   if (bg) ctx.drawImage(bg, 0, 0, w, h);
 
-  // неоновая линия + area
-  const ox = w * 0.05, rx = w * 0.93;
+  const ox = w * 0.05,
+    rx = w * 0.93;
   const yOf = (v: number) => h * (0.08 + (1 - v) * 0.84);
 
   // area
   const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, ACCENT_SOFT);
+  grad.addColorStop(0, hex(ACCENT, 0.18));
   grad.addColorStop(1, "rgba(0,0,0,0)");
   ctx.fillStyle = grad;
   ctx.beginPath();
@@ -228,19 +269,20 @@ function draw(
   for (let i = 0; i < series.length; i++) {
     const x = ox + (i / (series.length - 1)) * (rx - ox);
     const y = yOf(series[i]);
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
   }
   ctx.stroke();
   ctx.restore();
 
-  // шлейф точки
+  // шлейф
   for (const t of trail) {
     if (t.life <= 0) continue;
     const k = t.life / 600;
     const r = 6 + 26 * k;
     ctx.beginPath();
     ctx.fillStyle = hex(ACCENT, 0.25 * k);
-    ctx.arc(t.x, t.y, r, 0, Math.PI * 2);
+    ctx.arc(ex, ey, r, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -249,38 +291,41 @@ function draw(
   ctx.fillStyle = ACCENT;
   ctx.strokeStyle = "rgba(255,255,255,0.5)";
   ctx.arc(ex, ey, 6, 0, Math.PI * 2);
-  ctx.fill(); ctx.stroke();
+  ctx.fill();
+  ctx.stroke();
 
-  // луч (beamT 0..1)
+  // луч
   if (beamT > 0.01) {
-    const k = beamT;
     const ex1 = sx + Math.cos(a1) * L1;
     const ey1 = sy + Math.sin(a1) * L1;
-
-    // яркий сердцевинный луч
+    const k = beamT;
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     ctx.strokeStyle = hex(ACCENT, 0.6 * k);
     ctx.lineWidth = 6 * k;
     ctx.shadowBlur = 24;
     ctx.shadowColor = ACCENT;
-    ctx.beginPath(); ctx.moveTo(ex1, ey1); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(ex1, ey1);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
 
-    // внешнее глоу
     ctx.strokeStyle = hex(ACCENT, 0.18 * k);
     ctx.lineWidth = 16 * k;
     ctx.shadowBlur = 40;
-    ctx.beginPath(); ctx.moveTo(ex1, ey1); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(ex1, ey1);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
     ctx.restore();
   }
 
-  // рука: плечо → локоть → кисть (с «энергетической лентой»)
+  // рука
   const ex1 = sx + Math.cos(a1) * L1;
   const ey1 = sy + Math.sin(a1) * L1;
   const hx = ex1 + Math.cos(a1 + a2) * L2;
   const hy = ey1 + Math.sin(a1 + a2) * L2;
 
-  // энергетическая лента (две параллельные полупрозрачные)
   for (const wv of [10, 6]) {
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
@@ -289,27 +334,35 @@ function draw(
     ctx.shadowBlur = wv === 10 ? 18 : 12;
     ctx.shadowColor = ACCENT;
     ctx.lineCap = "round";
-    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex1, ey1); ctx.lineTo(hx, hy); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(ex1, ey1);
+    ctx.lineTo(hx, hy);
+    ctx.stroke();
     ctx.restore();
   }
 
-  // кисть
   glowCircle(ctx, hx, hy, 10, ACCENT);
 
-  // тело робота
+  // корпус/голова
   rounded(ctx, sx - 74, sy - 48, 148, 124, 22, "#1f2937", "rgba(255,255,255,0.1)");
-  // голова + визор-скан
   rounded(ctx, sx - 34, sy - 116, 68, 56, 14, "#111827", "rgba(255,255,255,0.14)");
   const scan = 0.5 + 0.5 * Math.sin(performance.now() / 340);
   ctx.fillStyle = hex(ACCENT, 0.6);
   ctx.fillRect(sx - 22, sy - 90, 44 * scan, 6);
 
-  // частицы
+  // искры
   for (const p of sparks) {
     const k = 1 - p.life / p.max;
     const r = 2 + 2 * k;
     glowCircle(ctx, p.x, p.y, r, hex("#ffffff", 0.35 * k));
     glowCircle(ctx, p.x, p.y, r * 0.9, hex(ACCENT, 0.6 * k));
+  }
+
+  // бейдж сделки
+  if (trade) {
+    const txt = `${trade.side} ${trade.change > 0 ? "+" : ""}${trade.change}%`;
+    drawBadge(ctx, ex + 10, ey - 10, txt, trade.side === "LONG" ? ACCENT : "#f87171", badgeK);
   }
 
   // рамка
@@ -326,17 +379,42 @@ function spawnSparks(arr: Particle[], x: number, y: number, col: string) {
   }
 }
 
+function drawBadge(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, color: string, k: number) {
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, Math.max(0, k * 1.2)); // плавный фейд
+  ctx.font = "bold 12px system-ui, -apple-system, Segoe UI, Roboto";
+  const padX = 8,
+    padY = 6;
+  const w = Math.ceil(ctx.measureText(text).width) + padX * 2;
+  const h = 24;
+  rounded(ctx, x, y - h, w, h, 8, "rgba(0,0,0,0.65)", "rgba(255,255,255,0.08)");
+  ctx.fillStyle = color;
+  ctx.fillText(text, x + padX, y - 8);
+  ctx.restore();
+}
+
 function glowCircle(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, color: string) {
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
   ctx.shadowBlur = 16;
   ctx.shadowColor = color;
   ctx.fillStyle = color;
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 }
 
-function rounded(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number, fill: string, stroke: string) {
+function rounded(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+  fill: string,
+  stroke: string
+) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.arcTo(x + w, y, x + w, y + h, r);
@@ -344,8 +422,10 @@ function rounded(ctx: CanvasRenderingContext2D, x: number, y: number, w: number,
   ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
-  ctx.fillStyle = fill; ctx.fill();
-  ctx.strokeStyle = stroke; ctx.stroke();
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.strokeStyle = stroke;
+  ctx.stroke();
 }
 
 function roundedStroke(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -359,9 +439,14 @@ function roundedStroke(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.stroke();
 }
 
-function clamp(v: number, a: number, b: number) { return Math.max(a, Math.min(b, v)); }
+function clamp(v: number, a: number, b: number) {
+  return Math.max(a, Math.min(b, v));
+}
+
 function hex(hex: string, a: number) {
   const n = hex.replace("#", "");
-  const r = parseInt(n.slice(0, 2), 16), g = parseInt(n.slice(2, 4), 16), b = parseInt(n.slice(4, 6), 16);
+  const r = parseInt(n.slice(0, 2), 16),
+    g = parseInt(n.slice(2, 4), 16),
+    b = parseInt(n.slice(4, 6), 16);
   return `rgba(${r},${g},${b},${a})`;
 }
