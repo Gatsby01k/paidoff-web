@@ -1,6 +1,5 @@
 // src/components/TradingConsole.tsx
 import React, { useState } from "react";
-import LiveChartFast from "./LiveChartFast";
 import RobotAssistantCanvas from "./RobotAssistantCanvas";
 import type { Risk } from "../lib/deposits";
 
@@ -26,16 +25,9 @@ export default function TradingConsole({ risk }: { risk: Risk }) {
   return (
     <div className="glow p-3">
       <div className="card relative overflow-hidden">
-        {/* График */}
+        {/* ВЕСЬ БЛОК — РОБОТ (внутри RobotAssistantCanvas своя сетка/анимация) */}
         <div className="h-[360px] md:h-[420px]">
-          <LiveChartFast risk={risk} />
-        </div>
-
-        {/* Робот поверх графика, в правом-нижнем углу */}
-        <div className="pointer-events-none absolute inset-0 flex items-end justify-end p-4">
-          <div className="w-[220px] h-[220px] pointer-events-auto">
-            <RobotAssistantCanvas onAsk={() => setOpen(true)} />
-          </div>
+          <RobotAssistantCanvas onAsk={() => setOpen(true)} />
         </div>
 
         {/* Кнопка чата */}
@@ -48,7 +40,7 @@ export default function TradingConsole({ risk }: { risk: Risk }) {
           </button>
         </div>
 
-        {/* Слайдер чата */}
+        {/* Слайдер чата снизу */}
         <div
           className={
             "absolute left-0 right-0 bottom-0 transition-transform duration-300 " +
@@ -93,7 +85,7 @@ export default function TradingConsole({ risk }: { risk: Risk }) {
   );
 }
 
-// простые шаблонные ответы (демо-логика)
+// простая демо-логика ответов
 function makeReply(q: string, risk: Risk) {
   const apr = risk === "HIGH" ? 25 : risk === "MEDIUM" ? 12 : 5;
   if (/apr|доход|прибыл/i.test(q))
