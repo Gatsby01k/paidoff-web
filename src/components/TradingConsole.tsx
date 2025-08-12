@@ -9,12 +9,16 @@ export default function TradingConsole({ risk }: { risk: Risk }) {
   const [open, setOpen] = useState(false);
   const [msg, setMsg] = useState("");
   const [log, setLog] = useState<Msg[]>([]);
+  const [trigger, setTrigger] = useState(0);
 
   function send() {
     const q = msg.trim();
     if (!q) return;
     setMsg("");
     setLog((l) => [...l, { from: "user", text: q }]);
+
+    // поджигаем новую «сделку»
+    setTrigger((t) => t + 1);
 
     const reply = makeReply(q, risk);
     setTimeout(() => {
@@ -25,9 +29,9 @@ export default function TradingConsole({ risk }: { risk: Risk }) {
   return (
     <div className="glow p-3">
       <div className="card relative overflow-hidden">
-        {/* ВЕСЬ БЛОК — РОБОТ (внутри RobotAssistantCanvas своя сетка/анимация) */}
+        {/* ВЕСЬ БЛОК — РОБОТ */}
         <div className="h-[360px] md:h-[420px]">
-          <RobotAssistantCanvas onAsk={() => setOpen(true)} />
+          <RobotAssistantCanvas risk={risk} trigger={trigger} onAsk={() => setOpen(true)} />
         </div>
 
         {/* Кнопка чата */}
@@ -40,7 +44,7 @@ export default function TradingConsole({ risk }: { risk: Risk }) {
           </button>
         </div>
 
-        {/* Слайдер чата снизу */}
+        {/* Слайдер чата */}
         <div
           className={
             "absolute left-0 right-0 bottom-0 transition-transform duration-300 " +
@@ -55,10 +59,7 @@ export default function TradingConsole({ risk }: { risk: Risk }) {
                 </div>
               )}
               {log.map((m, i) => (
-                <div
-                  key={i}
-                  className={m.from === "user" ? "text-yellow-200" : "text-neutral-200"}
-                >
+                <div key={i} className={m.from === "user" ? "text-yellow-200" : "text-neutral-200"}>
                   <span className="opacity-50">
                     {m.from === "user" ? "Вы:" : "Бот:"}
                   </span>{" "}
