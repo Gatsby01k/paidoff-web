@@ -1,15 +1,20 @@
 // src/components/TradingConsole.tsx
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import RobotAssistantCanvas from "./RobotAssistantCanvas";
 import type { Risk } from "../lib/deposits";
 
 type Msg = { from: "user" | "bot"; text: string };
+type Trade = { id: string; side: "LONG" | "SHORT"; change: number; level: number };
 
 export default function TradingConsole({ risk }: { risk: Risk }) {
   const [open, setOpen] = useState(false);
   const [msg, setMsg] = useState("");
   const [log, setLog] = useState<Msg[]>([]);
   const [trigger, setTrigger] = useState(0);
+  const [tape, setTape] = useState<Trade[]>([]);
+
+  // цвет акцента для подписей
+  const accent = useMemo(() => (risk === "HIGH" ? "#ff5c7a" : risk === "MEDIUM" ? "#f59e0b" : "#22c55e"), [risk]);
 
   function send() {
     const q = msg.trim();
@@ -17,13 +22,18 @@ export default function TradingConsole({ risk }: { risk: Risk }) {
     setMsg("");
     setLog((l) => [...l, { from: "user", text: q }]);
 
-    // "сделка": вспышка + искры + резкий доворот руки
+    // визуальный триггер сцены
     setTrigger((t) => t + 1);
 
-    const reply = makeReply(q, risk);
-    setTimeout(() => {
-      setLog((l) => [...l, { from: "bot", text: reply }]);
-    }, 280);
+    // псевдо-сделка для тикера
+    const side: Trade["side"] = Math.random() > 0.5 ? "LONG" : "SHORT";
+    const change = +( (Math.random() * 2.2 - 1.1).toFixed(2) ); // -1.1…+1.1%
+    const level = +( (100 + Math.random() * 10).toFixed(2) );
+    const id = crypto.randomUUID().slice(0, 6);
+    setTape((arr) => [{ id, side, change, level }, ...arr].slice(0, 5));
+
+    const reply = makeReply(q, risk, side, change);
+    setTimeout(() => setLog((l) => [...l, { from: "bot", text: reply }]), 260);
   }
 
   return (
@@ -38,16 +48,32 @@ export default function TradingConsole({ risk }: { risk: Risk }) {
         </div>
 
         {/* Turbo-сцена */}
-        <div className="h-[360px] md:h-[420px]">
+        <div className="h-[360px] md:h-[420px] relative">
           <RobotAssistantCanvas risk={risk} trigger={trigger} />
+
+          {/* тикер последних "сделок" */}
+          <div className="absolute right-3 bottom-3 pointer-events-none">
+            {tape.map((t) => (
+              <div
+                key={t.id}
+                className="mb-1 text-xs px-2 py-1 rounded-md"
+                style={{
+                  background: "rgba(0,0,0,0.55)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  color: "#e5e7eb",
+                }}
+              >
+                <span style={{ color: t.side === "LONG" ? accent : "#f87171", fontWeight: 800 }}>
+                  {t.side}
+                </span>{" "}
+                {t.change > 0 ? `+${t.change}%` : `${t.change}%`} · {t.level}
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Чат: под сценой, коллапс с анимацией */}
-        <div
-          className={`transition-all duration-300 ${
-            open ? "max-h-56 opacity-100" : "max-h-0 opacity-0"
-          } overflow-hidden`}
-        >
+        {/* Чат снизу (коллапс) */}
+        <div className={`transition-all duration-300 ${open ? "max-h-56 opacity-100" : "max-h-0 opacity-0"} overflow-hidden`}>
           <div className="px-4 pb-3 pt-2 border-t border-white/10 bg-black/40 backdrop-blur">
             <div className="max-h-40 overflow-y-auto space-y-2 text-sm py-2">
               {log.length === 0 && (
@@ -67,9 +93,7 @@ export default function TradingConsole({ risk }: { risk: Risk }) {
                 placeholder="Напиши вопрос…"
                 className="flex-1 bg-white/5 rounded-xl px-3 py-2 outline-none"
               />
-              <button onClick={send} className="btn-primary px-4 py-2">
-                Отправить
-              </button>
+              <button onClick={send} className="btn-primary px-4 py-2">Отправить</button>
             </div>
           </div>
         </div>
@@ -78,20 +102,14 @@ export default function TradingConsole({ risk }: { risk: Risk }) {
   );
 }
 
-// простая демо-логика ответов
-function makeReply(q: string, risk: Risk) {
+function makeReply(q: string, risk: Risk, side: "LONG" | "SHORT", change: number) {
   const apr = risk === "HIGH" ? 25 : risk === "MEDIUM" ? 12 : 5;
-  if (/apr|доход|прибыл/i.test(q))
-    return `Профиль ${risk}: модельный APR ≈ ${apr}%/мес. Реальный результат зависит от рынка.`;
-  if (/срок|месяц|period|term/i.test(q))
-    return `Для ${risk} разумный горизонт — ${
-      risk === "HIGH" ? "3–6" : "1–3"
-    } месяцев.`;
-  if (/риск|безопас/i.test(q))
-    return `Профиль ${risk}: ${
-      risk === "HIGH"
-        ? "макс. потенциал и волатильность"
-        : "умеренный риск и более стабильная кривая"
-    }.`;
-  return "Могу подсказать по рискам, APR и срокам. Спроси 🙂";
+  const base =
+    /apr|доход|прибыл/i.test(q) ? `Профиль ${risk}: модельный APR ≈ ${apr}%/мес.` :
+    /срок|месяц|period|term/i.test(q) ? `Для ${risk} разумный горизонт — ${risk === "HIGH" ? "3–6" : "1–3"} месяцев.` :
+    /риск|безопас/i.test(q) ? `Профиль ${risk}: ${risk === "HIGH" ? "выше волатильность и потенциал" : "умеренный риск и более ровная кривая"}.` :
+    "Могу подсказать по APR, рискам и срокам.";
+
+  const spice = ` Последний сигнал: ${side} ${change > 0 ? "+" : ""}${change}%.`;
+  return base + spice;
 }
