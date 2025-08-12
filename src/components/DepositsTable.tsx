@@ -1,5 +1,5 @@
 // src/components/DepositsTable.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Deposit,
   claimDeposit,
@@ -14,7 +14,6 @@ export default function DepositsTable() {
   const { address } = useAccount();
   const [list, setList] = useState<Deposit[]>([]);
 
-  // автотик раз в 5 секунд
   useEffect(() => {
     const load = () => setList(listDeposits(address || undefined));
     load();
@@ -27,10 +26,72 @@ export default function DepositsTable() {
 
   const has = list.length > 0;
 
+  function refresh() {
+    setList(listDeposits(address || undefined));
+  }
+
+  function exportCSV() {
+    if (!list.length) return;
+    const header = [
+      "id",
+      "owner",
+      "risk",
+      "amount",
+      "months",
+      "apr",
+      "expectedPayout",
+      "createdAt",
+      "unlockAt",
+      "status",
+    ];
+    const rows = list.map((d) => [
+      d.id,
+      d.owner || "",
+      d.risk,
+      d.amount,
+      d.months,
+      d.apr,
+      d.expectedPayout,
+      new Date(d.createdAt).toISOString(),
+      new Date(d.unlockAt).toISOString(),
+      d.status,
+    ]);
+    const csv =
+      [header, ...rows]
+        .map((r) => r.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(","))
+        .join("\n") + "\n";
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "paidoff_deposits.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function clearAll() {
+    localStorage.removeItem("paidoff.deposits.v1");
+    refresh();
+  }
+
   return (
     <section className="max-w-7xl mx-auto px-6 py-10">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-2xl font-extrabold">Мои депозиты</h2>
+        <div className="flex gap-2">
+          <button
+            onClick={exportCSV}
+            className="bg-white/5 hover:bg-white/7 rounded-2xl px-4 py-2 text-sm"
+          >
+            Экспорт CSV
+          </button>
+          <button
+            onClick={clearAll}
+            className="bg-white/5 hover:bg-white/7 rounded-2xl px-4 py-2 text-sm"
+          >
+            Очистить
+          </button>
+        </div>
       </div>
 
       {!has ? (
@@ -54,7 +115,7 @@ export default function DepositsTable() {
             </thead>
             <tbody>
               {list.map((d) => (
-                <Row key={d.id} d={d} onChanged={() => setList(listDeposits(address || undefined))} />
+                <Row key={d.id} d={d} onChanged={refresh} />
               ))}
             </tbody>
           </table>
