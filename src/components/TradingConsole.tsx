@@ -17,7 +17,7 @@ export default function TradingConsole({ risk }: { risk: Risk }) {
     setMsg("");
     setLog((l) => [...l, { from: "user", text: q }]);
 
-    // поджигаем новую «сделку»
+    // подсветим "сделку" и движение руки
     setTrigger((t) => t + 1);
 
     const reply = makeReply(q, risk);
@@ -28,46 +28,38 @@ export default function TradingConsole({ risk }: { risk: Risk }) {
 
   return (
     <div className="glow p-3">
-      <div className="card relative overflow-hidden">
-        {/* ВЕСЬ БЛОК — РОБОТ */}
-        <div className="h-[360px] md:h-[420px]">
-          <RobotAssistantCanvas risk={risk} trigger={trigger} onAsk={() => setOpen(true)} />
-        </div>
-
-        {/* Кнопка чата */}
-        <div className="absolute left-4 bottom-4">
-          <button
-            className="btn-primary px-4 py-2"
-            onClick={() => setOpen((o) => !o)}
-          >
+      <div className="card overflow-hidden">
+        {/* Хедер панели */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+          <div className="text-sm tracking-wide opacity-70">AI Trading Console</div>
+          <button className="btn-primary px-4 py-2" onClick={() => setOpen((o) => !o)}>
             {open ? "Свернуть чат" : "Спросить робота"}
           </button>
         </div>
 
-        {/* Слайдер чата */}
+        {/* Робот + "живой график" */}
+        <div className="h-[360px] md:h-[420px]">
+          <RobotAssistantCanvas risk={risk} trigger={trigger} />
+        </div>
+
+        {/* Чат снизу — под графиком */}
         <div
-          className={
-            "absolute left-0 right-0 bottom-0 transition-transform duration-300 " +
-            (open ? "translate-y-0" : "translate-y-[88%]")
-          }
+          className={`transition-all duration-300 ${
+            open ? "max-h-56 opacity-100" : "max-h-0 opacity-0"
+          } overflow-hidden`}
         >
-          <div className="mx-3 mb-3 rounded-2xl bg-black/70 backdrop-blur border border-white/10">
-            <div className="max-h-44 overflow-y-auto p-3 space-y-2 text-sm">
+          <div className="px-4 pb-3 pt-2 border-t border-white/10 bg-black/40 backdrop-blur">
+            <div className="max-h-40 overflow-y-auto space-y-2 text-sm py-2">
               {log.length === 0 && (
-                <div className="opacity-60">
-                  Я — помощник. Спроси про риск, доходность и сроки.
-                </div>
+                <div className="opacity-60">Я — помощник. Спроси про APR, риск и сроки.</div>
               )}
               {log.map((m, i) => (
                 <div key={i} className={m.from === "user" ? "text-yellow-200" : "text-neutral-200"}>
-                  <span className="opacity-50">
-                    {m.from === "user" ? "Вы:" : "Бот:"}
-                  </span>{" "}
-                  {m.text}
+                  <span className="opacity-50">{m.from === "user" ? "Вы:" : "Бот:"}</span> {m.text}
                 </div>
               ))}
             </div>
-            <div className="flex items-center gap-2 p-3 border-t border-white/10">
+            <div className="flex items-center gap-2">
               <input
                 value={msg}
                 onChange={(e) => setMsg(e.target.value)}
@@ -98,8 +90,8 @@ function makeReply(q: string, risk: Risk) {
   if (/риск|безопас/i.test(q))
     return `Профиль ${risk}: ${
       risk === "HIGH"
-        ? "больше волатильность, но и потенциальная доходность выше"
-        : "умеренный риск и более предсказуемая доходность"
+        ? "выше волатильность и потенциальная доходность"
+        : "умеренный риск и более предсказуемый результат"
     }.`;
   return "Могу рассказать про APR, риск-профили и рекомендуемые сроки. Спроси 🙂";
 }
