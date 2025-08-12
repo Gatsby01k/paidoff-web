@@ -1,20 +1,20 @@
+// src/App.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import LiveChartFast from "./components/LiveChartFast";
-import RobotQA from "./components/RobotQA";
-import RobotAssistantCanvas from "./components/RobotAssistantCanvas";
+import TradingConsole from "./components/TradingConsole";
 import PlanModal from "./components/PlanModal";
 import DepositWizard from "./components/DepositWizard";
 import DepositsTable from "./components/DepositsTable";
-import { Risk } from "./lib/deposits";
+import type { Risk } from "./lib/deposits";
 import { decodePlan, encodePlan } from "./lib/share";
 
 export default function App() {
+  // --------- Form state ---------
   const [risk, setRisk] = useState<Risk>("LOW");
   const [amount, setAmount] = useState<number>(500);
   const [months, setMonths] = useState<number>(1);
 
-  // init from URL (?risk=…&amount=…&months=…)
+  // Инициализация из URL (?risk=HIGH&amount=1000&months=6)
   useEffect(() => {
     const init = decodePlan(window.location.search);
     if (init.risk) setRisk(init.risk);
@@ -22,6 +22,7 @@ export default function App() {
     if (typeof init.months === "number") setMonths(init.months);
   }, []);
 
+  // --------- Derived ---------
   const apr = useMemo(() => {
     if (risk === "HIGH") return 0.25;
     if (risk === "MEDIUM") return 0.12;
@@ -34,6 +35,7 @@ export default function App() {
     return total;
   }, [amount, months, apr]);
 
+  // --------- UI controls ---------
   const [planOpen, setPlanOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
@@ -57,7 +59,7 @@ export default function App() {
       {/* Header */}
       <header className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-3 h-3 rounded-full bg-yellow-300 shadow-[0_0_20px_#FDE047]"></div>
+          <div className="w-3 h-3 rounded-full bg-yellow-300 shadow-[0_0_20px_#FDE047]" />
           <div className="font-extrabold text-xl tracking-wide">
             PAID<span className="text-yellow-300">OFF</span>
           </div>
@@ -70,7 +72,7 @@ export default function App() {
         <ConnectButton chainStatus="icon" showBalance={false} />
       </header>
 
-      {/* Flash */}
+      {/* Flash message */}
       {flash && (
         <div className="max-w-7xl mx-auto px-6">
           <div className="card border border-yellow-400/20 bg-yellow-400/10 text-yellow-200 p-3 mb-4">
@@ -81,7 +83,7 @@ export default function App() {
 
       {/* Hero */}
       <section className="max-w-7xl mx-auto px-6 py-8 grid lg:grid-cols-2 gap-8 items-stretch">
-        {/* Left: controls */}
+        {/* LEFT: controls */}
         <div className="space-y-6">
           <h1 className="text-4xl md:text-5xl font-extrabold leading-tight">
             Авто-трейдинг на <span className="text-yellow-300">ИИ</span> <br />
@@ -93,7 +95,7 @@ export default function App() {
             а ИИ-стратегия торгует за тебя (модельная доходность).
           </p>
 
-          {/* risk */}
+          {/* Risk selector */}
           <div className="flex gap-3">
             {(["LOW", "MEDIUM", "HIGH"] as Risk[]).map((r) => (
               <button
@@ -111,7 +113,7 @@ export default function App() {
             ))}
           </div>
 
-          {/* inputs */}
+          {/* Inputs */}
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="card p-4">
               <div className="text-xs opacity-60 mb-1">Сумма (USDT)</div>
@@ -171,26 +173,16 @@ export default function App() {
           </div>
         </div>
 
-        {/* Right: chart + робот */}
+        {/* RIGHT: AI Trading Console (график + робот + чат) */}
         <div className="space-y-4">
-          <div className="glow p-2">
-            <div className="card p-2 h-[360px] md:h-[420px]">
-              <div className="w-full h-full rounded-2xl overflow-hidden">
-                <LiveChartFast risk={risk} />
-              </div>
-            </div>
-          </div>
-
-          <RobotAssistantCanvas
-            onAsk={() => window.dispatchEvent(new CustomEvent("po-open-chat"))}
-          />
+          <TradingConsole risk={risk} />
         </div>
       </section>
 
-      {/* Мои депозиты */}
+      {/* Deposits */}
       <DepositsTable />
 
-      {/* Модалки */}
+      {/* Modals */}
       <PlanModal open={planOpen} onClose={() => setPlanOpen(false)} />
       <DepositWizard
         open={wizardOpen}
@@ -204,8 +196,6 @@ export default function App() {
           setTimeout(() => setFlash(null), 4000);
         }}
       />
-
-      <RobotQA />
     </main>
   );
 }
