@@ -1,201 +1,124 @@
-// src/App.tsx
-import React, { useEffect, useMemo, useState } from "react";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import TradingConsole from "./components/TradingConsole";
-import PlanModal from "./components/PlanModal";
-import DepositWizard from "./components/DepositWizard";
-import DepositsTable from "./components/DepositsTable";
-import type { Risk } from "./lib/deposits";
-import { decodePlan, encodePlan } from "./lib/share";
+import React, { useMemo, useState } from "react";
+import "./styles.css";
+import RobotChart from "./components/RobotChart";
+import AskBot from "./components/AskBot";
+
+type Risk = "LOW" | "MEDIUM" | "HIGH";
 
 export default function App() {
-  // --------- Form state ---------
   const [risk, setRisk] = useState<Risk>("LOW");
-  const [amount, setAmount] = useState<number>(500);
-  const [months, setMonths] = useState<number>(1);
+  const [amount, setAmount] = useState(500);
+  const [months, setMonths] = useState(1);
+  const [chatOpen, setChatOpen] = useState(false);
 
-  // Инициализация из URL (?risk=HIGH&amount=1000&months=6)
-  useEffect(() => {
-    const init = decodePlan(window.location.search);
-    if (init.risk) setRisk(init.risk);
-    if (typeof init.amount === "number") setAmount(init.amount);
-    if (typeof init.months === "number") setMonths(init.months);
-  }, []);
-
-  // --------- Derived ---------
-  const apr = useMemo(() => {
-    if (risk === "HIGH") return 0.25;
-    if (risk === "MEDIUM") return 0.12;
-    return 0.05;
-  }, [risk]);
-
+  const apr = useMemo(() => (risk === "LOW" ? 5 : risk === "MEDIUM" ? 12 : 24), [risk]);
   const payout = useMemo(() => {
-    let total = amount;
-    for (let i = 0; i < months; i++) total *= 1 + apr;
-    return total;
+    const m = Math.max(1, months);
+    const r = apr / 100;
+    const total = amount * Math.pow(1 + r, m);
+    return Math.round(total * 100) / 100;
   }, [amount, months, apr]);
 
-  // --------- UI controls ---------
-  const [planOpen, setPlanOpen] = useState(false);
-  const [wizardOpen, setWizardOpen] = useState(false);
-  const [flash, setFlash] = useState<string | null>(null);
-
-  function sharePlan() {
-    const url = encodePlan({ risk, amount, months });
-    navigator.clipboard
-      .writeText(url)
-      .then(() => {
-        setFlash("Ссылка на план скопирована!");
-        setTimeout(() => setFlash(null), 2500);
-      })
-      .catch(() => {
-        setFlash("Не удалось скопировать ссылку");
-        setTimeout(() => setFlash(null), 2500);
-      });
-  }
-
   return (
-    <main className="min-h-screen">
-      {/* Header */}
-      <header className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-3 h-3 rounded-full bg-yellow-300 shadow-[0_0_20px_#FDE047]" />
-          <div className="font-extrabold text-xl tracking-wide">
-            PAID<span className="text-yellow-300">OFF</span>
-          </div>
+    <div className="min-h-full">
+      {/* Top bar */}
+      <div className="mx-auto max-w-7xl px-4 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-[var(--paid-yellow)] shadow-[0_0_18px_rgba(255,214,10,.5)]" />
+          <div className="font-extrabold tracking-wide">PAID<span className="text-[var(--paid-yellow)]">OFF</span></div>
         </div>
-        <nav className="hidden md:flex items-center gap-6 text-sm opacity-80">
-          <a href="#" className="hover:opacity-100 transition">Whitepaper</a>
-          <a href="#" className="hover:opacity-100 transition">Docs</a>
-          <a href="#" className="hover:opacity-100 transition">Security</a>
-        </nav>
-        <ConnectButton chainStatus="icon" showBalance={false} />
-      </header>
-
-      {/* Flash message */}
-      {flash && (
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="card border border-yellow-400/20 bg-yellow-400/10 text-yellow-200 p-3 mb-4">
-            {flash}
-          </div>
+        <div className="flex items-center gap-6 text-sm text-white/70">
+          <a href="#" className="hover:text-white">Whitepaper</a>
+          <a href="#" className="hover:text-white">Docs</a>
+          <a href="#" className="hover:text-white">Security</a>
+          <button className="btn-glow px-4 py-2 text-sm font-semibold">Подключить кошелёк</button>
         </div>
-      )}
+      </div>
 
-      {/* Hero */}
-      <section className="max-w-7xl mx-auto px-6 py-8 grid lg:grid-cols-2 gap-8 items-stretch">
-        {/* LEFT: controls */}
+      <div className="mx-auto max-w-7xl px-4 grid gap-8 lg:grid-cols-2">
+        {/* LEFT — hero & controls */}
         <div className="space-y-6">
-          <h1 className="text-4xl md:text-5xl font-extrabold leading-tight">
-            Авто-трейдинг на <span className="text-yellow-300">ИИ</span> <br />
-            с фиксированным сроком и риском
+          <h1 className="hero-title text-4xl sm:text-5xl font-extrabold leading-[1.05]">
+            Авто-трейдинг на <span className="text-[var(--paid-yellow)]">ИИ</span>
+            <br />с фиксированным сроком и риском
           </h1>
-
-          <p className="text-neutral-300 max-w-xl">
-            Выбери риск-профиль, сумму и срок. Средства блокируются на период,
-            а ИИ-стратегия торгует за тебя (модельная доходность).
+          <p className="text-white/70 max-w-[52ch]">
+            Выбери риск-профиль, сумму и срок. Средства блокируются на период, а ИИ-стратегия торгует за тебя.
           </p>
 
-          {/* Risk selector */}
+          {/* risk pills */}
           <div className="flex gap-3">
             {(["LOW", "MEDIUM", "HIGH"] as Risk[]).map((r) => (
               <button
                 key={r}
                 onClick={() => setRisk(r)}
-                className={
-                  "px-5 py-3 rounded-2xl font-extrabold " +
-                  (risk === r
-                    ? "btn-primary"
-                    : "bg-white/5 hover:bg-white/7 transition")
-                }
+                className={`badge-pill ${risk === r ? "active" : ""}`}
               >
                 {r}
               </button>
             ))}
           </div>
 
-          {/* Inputs */}
+          {/* controls */}
           <div className="grid sm:grid-cols-2 gap-4">
-            <div className="card p-4">
-              <div className="text-xs opacity-60 mb-1">Сумма (USDT)</div>
+            <div>
+              <label className="text-xs text-white/50">Сумма (USDT)</label>
               <input
                 type="number"
                 value={amount}
-                onChange={(e) => setAmount(Math.max(0, Number(e.target.value)))}
-                className="w-full bg-black/40 rounded-xl px-3 py-2 outline-none"
+                onChange={(e) => setAmount(Math.max(50, Number(e.target.value)))}
+                className="w-full mt-1 bg-[#0f1116] border border-[#1b1e24] rounded-lg px-3 py-2 outline-none focus:border-yellow-400/50"
               />
             </div>
-
-            <div className="card p-4">
-              <div className="text-xs opacity-60 mb-1">Срок (мес.)</div>
+            <div>
+              <label className="text-xs text-white/50">Срок (мес.)</label>
               <input
                 type="number"
                 value={months}
                 onChange={(e) => setMonths(Math.max(1, Number(e.target.value)))}
-                className="w-full bg-black/40 rounded-xl px-3 py-2 outline-none"
+                className="w-full mt-1 bg-[#0f1116] border border-[#1b1e24] rounded-lg px-3 py-2 outline-none focus:border-yellow-400/50"
               />
             </div>
-
-            <div className="card p-4">
-              <div className="text-xs opacity-60 mb-1">APR (модельно)</div>
-              <div className="text-2xl font-extrabold text-yellow-300">
-                {(apr * 100).toFixed(0)}%
-              </div>
+            <div>
+              <label className="text-xs text-white/50">APR (модельно)</label>
+              <div className="mt-1 badge-pill">{apr}%</div>
             </div>
-
-            <div className="card p-4">
-              <div className="text-xs opacity-60 mb-1">Прогноз на выплату</div>
-              <div className="text-2xl font-extrabold">
-                {payout.toFixed(2)} <span className="opacity-60">USDT</span>
-              </div>
+            <div>
+              <label className="text-xs text-white/50">Прогноз на выплату</label>
+              <div className="mt-1 badge-pill">{payout.toFixed(2)} USDT</div>
             </div>
           </div>
 
-          <div className="flex gap-3">
-            <button
-              className="btn-primary px-6 py-4"
-              onClick={() => setWizardOpen(true)}
-            >
-              START AUTO-TRADING
-            </button>
-            <button
-              className="bg-white/5 hover:bg-white/7 rounded-2xl px-6 py-4 font-bold"
-              onClick={() => setPlanOpen(true)}
-            >
-              View Plans
-            </button>
-            <button
-              className="bg-white/5 hover:bg-white/7 rounded-2xl px-6 py-4 font-bold"
-              onClick={sharePlan}
-              title="Скопировать ссылку на текущую конфигурацию"
-            >
-              Share plan
-            </button>
+          <div className="flex gap-3 pt-2">
+            <button className="btn-glow px-5 py-3 font-semibold">START AUTO-TRADING</button>
+            <button className="badge-pill">View Plans</button>
+            <button className="badge-pill">Share plan</button>
           </div>
         </div>
 
-        {/* RIGHT: AI Trading Console (график + робот + чат) */}
+        {/* RIGHT — robot + chart + chat */}
         <div className="space-y-4">
-          <TradingConsole risk={risk} />
+          <RobotChart
+            title="AI Trading Console"
+            onAsk={() => setChatOpen((v) => !v)}
+            chatOpen={chatOpen}
+          />
+
+          <div className={`chat-wrap ${chatOpen ? "open" : ""}`}>
+            <div className="chat-panel">
+              {chatOpen && <AskBot />}
+            </div>
+          </div>
         </div>
-      </section>
+      </div>
 
-      {/* Deposits */}
-      <DepositsTable />
+      {/* deposits stub */}
+      <div className="mx-auto max-w-7xl px-4 mt-12">
+        <div className="font-semibold mb-2">Мои депозиты</div>
+        <div className="badge-pill text-white/60">Депозитов пока нет. Заблокируй средства через форму выше.</div>
+      </div>
 
-      {/* Modals */}
-      <PlanModal open={planOpen} onClose={() => setPlanOpen(false)} />
-      <DepositWizard
-        open={wizardOpen}
-        onClose={() => setWizardOpen(false)}
-        amount={amount}
-        months={months}
-        risk={risk}
-        onDone={() => {
-          setWizardOpen(false);
-          setFlash("Депозит создан! Он появится в списке ниже.");
-          setTimeout(() => setFlash(null), 4000);
-        }}
-      />
-    </main>
+      <div className="h-16" />
+    </div>
   );
 }
