@@ -1,23 +1,24 @@
 {
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-
-    "three": "0.159.0",
-    "@react-three/fiber": "^8.15.16",
-    "@react-three/drei": "^9.122.0",
-    "postprocessing": "^6.35.4",
-    "@react-three/postprocessing": "^2.16.0"
-  },
-  "devDependencies": {
-    "vite": "^5.4.0",
-    "@types/react": "^18.2.0",
-    "@types/react-dom": "^18.2.0",
-    "typescript": "^5.4.0"
-  },
+  "name": "@paidoff/web",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview --port 4173"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.4",
+    "@types/react-dom": "18.3.0",
+    "autoprefixer": "10.4.20",
+    "postcss": "8.4.41",
+    "tailwindcss": "3.4.10",
+    "typescript": "5.5.4",
+    "vite": "5.4.9"
   }
 }
